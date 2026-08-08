@@ -3,60 +3,46 @@ import { supabase } from "./supabaseClient";
 import { loadCloudStateWithRetry, saveCloudState, flushCloudStateSync, getLocalCache, getSnapshots, hasRealData, onSyncStatusChange } from "./lib/cloudSync";
 import logoUrl from "./logo.png";
 
-// ─── THEME ───────────────────────────────────────────────────────────────────
+// ─── THEME — DR. JOURNAL (Neon) ─────────────────────────────────────────────────
 // C is intentionally a single mutable object — every component reads C.xxx at
 // render time, so mutating its properties (via applyTheme) re-colors the whole
 // app without needing to thread theme through every component as a prop.
+// Palette locked to the Dr. Journal brand marks: #A1E503 (neon green), #000000
+// (black), #FEFEFE (white) — there is no theme picker anymore, this is the
+// only look the app has.
 const C = {
-  bg: "#020617", surface: "#0F172A", surfaceHigh: "#334155",
-  border: "#1e293b", borderLight: "#334155",
-  accent: "#32D18D", accentDim: "#32D18D22", accentHover: "#28b378",
-  accent2: "#ff8a3d", accent2Dim: "#ff8a3d22", accent2Hover: "#e87530",
-  purple: "#8b5cf6", purpleDim: "#8b5cf61f",
-  red: "#ff4466", redDim: "#ff446622",
-  yellow: "#f5a623", yellowDim: "#f5a62322",
-  blue: "#4488ff", blueDim: "#4488ff22",
-  text: "#e8eaf0", textMuted: "#94a3b8", textDim: "#64748b",
-  sidebar: "#0F172A",
+  bg: "#000000", surface: "#0A0A0A", surfaceHigh: "#1A1A1A",
+  border: "#242424", borderLight: "#333333",
+  accent: "#A1E503", accentDim: "#A1E50322", accentHover: "#8CCB02",
+  accent2: "#39FF9E", accent2Dim: "#39FF9E22", accent2Hover: "#22D983",
+  purple: "#B026FF", purpleDim: "#B026FF1f",
+  red: "#FF2965", redDim: "#FF296522",
+  yellow: "#FFD400", yellowDim: "#FFD40022",
+  blue: "#00E5FF", blueDim: "#00E5FF22",
+  text: "#FEFEFE", textMuted: "#A6A6A6", textDim: "#6E6E6E",
+  sidebar: "#000000",
 };
 
-const NIGHT_BASE = { bg: "#020617", surface: "#0F172A", surfaceHigh: "#334155", border: "#1e293b", borderLight: "#334155", text: "#e8eaf0", textMuted: "#94a3b8", textDim: "#64748b", sidebar: "#0F172A" };
-const DAY_BASE = { bg: "#f4f5f8", surface: "#ffffff", surfaceHigh: "#eef0f5", border: "#dde1ea", borderLight: "#c9cfdc", text: "#161a22", textMuted: "#5b6478", textDim: "#8a93a8", sidebar: "#ffffff" };
-// Deeper, near-black base used by the "Terminal Black" theme — sits below NIGHT_BASE in brightness.
-const TERMINAL_BASE = { bg: "#020617", surface: "#0c0e13", surfaceHigh: "#334155", border: "#1b1f2a", borderLight: "#334155", text: "#eef0f5", textMuted: "#717b95", textDim: "#454c61", sidebar: "#0F172A" };
-// Base modeled on tradeset.app — near-black navy with a slightly darker sidebar than main content.
-// Brand palette: background #020617, boxes/cards #0F172A, inputs/hover surfaces #334155.
-const TRADESET_BASE = { bg: "#020617", surface: "#0F172A", surfaceHigh: "#334155", border: "#1e293b", borderLight: "#334155", text: "#f2f4f9", textMuted: "#94a3b8", textDim: "#64748b", sidebar: "#0F172A" };
+// Single neon-black base — no day mode, no alternate palettes.
+const NEON_BASE = { bg: "#000000", surface: "#0A0A0A", surfaceHigh: "#1A1A1A", border: "#242424", borderLight: "#333333", text: "#FEFEFE", textMuted: "#A6A6A6", textDim: "#6E6E6E", sidebar: "#000000" };
 
 const THEMES = {
-  // Clone of tradeset.app's palette — near-black navy base, mint-green accent,
-  // burnt-orange secondary. This is now the app's default look.
-  "TradeSet": { base: TRADESET_BASE, accent: "#32D18D", accentHover: "#28b378", accent2: "#ff8a3d", accent2Hover: "#e87530" },
-  "Original": { accent: "#1fd9a8", accentHover: "#16b88c", accent2: "#ff8a3d", accent2Hover: "#e87530" },
-  "Apex Green": { accent: "#16d16a", accentHover: "#11a955", accent2: "#ff8a3d", accent2Hover: "#e87530" },
-  "Brass Terminal": { accent: "#c4995f", accentHover: "#a87f49", accent2: "#ff8a3d", accent2Hover: "#e87530" },
-  "Mint Glass": { accent: "#3fe0bd", accentHover: "#23c6a1", accent2: "#ff8a3d", accent2Hover: "#e87530" },
-  "Ice Blade": { accent: "#a78bfa", accentHover: "#8d6ef0", accent2: "#ff8a3d", accent2Hover: "#e87530" },
-  "Cobalt": { accent: "#4488ff", accentHover: "#2f6fe0", accent2: "#ff8a3d", accent2Hover: "#e87530" },
-  // Deep near-black "fintech terminal" palette — green stays the primary accent
-  // (P&L, equity curve, win stats) while accent2 is a burnt orange used for
-  // secondary/behavioral widgets, matching the reference screenshot.
-  "Terminal Black": { base: TERMINAL_BASE, accent: "#34d399", accentHover: "#1fb886", accent2: "#d97a3f", accent2Hover: "#bd672f" },
+  "Neon": { base: NEON_BASE, accent: "#A1E503", accentHover: "#8CCB02", accent2: "#39FF9E", accent2Hover: "#22D983" },
 };
 
-// Gradient wordmark style (blue → mint), matching tradeset.app's logo treatment.
+// Gradient wordmark style (neon green → spring green), matching the Dr. Journal logo.
 // A function (not a static object) because C's colors are mutated by applyTheme() —
 // this must be re-evaluated at render time to pick up the active theme's colors.
 const gradientTextStyle = () => ({
-  backgroundImage: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`,
+  backgroundImage: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, ${C.text})`,
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
   backgroundClip: "text",
 });
 
-function applyTheme(themeName = "Original", mode = "night", transparency = 0, popupTransparency = 0) {
-  const theme = THEMES[themeName] || THEMES["TradeSet"];
-  const base = theme.base ? theme.base : (mode === "day" ? DAY_BASE : NIGHT_BASE);
+function applyTheme(_themeName, _mode, transparency = 0, popupTransparency = 0) {
+  const theme = THEMES["Neon"];
+  const base = NEON_BASE;
   Object.assign(C, base, theme, { accentDim: theme.accent + "22", accent2Dim: theme.accent2 + "22" });
   // Interface Transparency (Settings → adjustable 0–90): 0 = fully solid
   // panels, 90 = nearly invisible. Cards and their sub-panels (surfaceHigh)
@@ -97,18 +83,17 @@ function buildGlobalCSS() {
   input[type="date"]::-webkit-datetime-edit,input[type="time"]::-webkit-datetime-edit{padding:0}
   input[type="date"]::-webkit-datetime-edit-fields-wrapper,input[type="time"]::-webkit-datetime-edit-fields-wrapper{padding:0}
   button{cursor:pointer;font-family:inherit}
-  /* "+ Add Trade" style — dark pill with a teal/cyan outline that brightens
-     and glows on hover. Colors here are fixed (not theme-driven) to match
-     the reference screenshot exactly. */
+  /* "+ Add Trade" style — black pill with a neon-green outline that brightens
+     and glows on hover, matching the Dr. Journal brand mark. */
   .btn-teal-outline{
     background:${C.bg};
-    border:1.5px solid #22d3ee66;
-    color:#eaf9fb;
+    border:1.5px solid #A1E50366;
+    color:#FEFEFE;
   }
   .btn-teal-outline:hover{
-    background:#22d3ee14;
-    border-color:#22d3ee;
-    box-shadow:0 0 0 3px #22d3ee22, 0 0 18px #22d3ee4d;
+    background:#A1E50314;
+    border-color:#A1E503;
+    box-shadow:0 0 0 3px #A1E50322, 0 0 18px #A1E5034d;
   }
   .btn-teal-outline:active{
     transform:scale(0.98);
@@ -210,17 +195,16 @@ const fmtTime = (iso) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-di
 const ACCOUNT_COLORS = [C.accent, C.yellow, C.blue, "#ff8844", "#cc44ff", "#44ccff", "#ff44cc"];
 
 // ─── PLAN / FEATURE GATING ────────────────────────────────────────────────────
-// Ace Basic (free) vs AcePlus ($10/mo). NOTE: this is client-side UI gating
+// Journal Basic (free) vs Journal Plus ($10/mo). NOTE: this is client-side UI gating
 // only — there's no backend/payment processor wired up yet, so it's easy to
 // bypass via devtools. Fine for a prototype / trust-based rollout; swap the
 // SET_PLAN dispatch for a real server-verified subscription check before
 // charging real money.
-const PLAN_NAME = { free: "Ace Basic", plus: "AcePlus" };
+const PLAN_NAME = { free: "Journal Basic", plus: "Journal Plus" };
 const FREE_LIMITS = { maxTrades: 40, maxAccounts: 1, maxSetups: 4, maxScreenshots: 1 };
 const PLUS_ONLY_PAGES = { mynotes: "My Notes", analytics: "Analytics", emotions: "Edge Score", finances: "Prop Firms", livecapital: "Live Capital", myrecord: "My Record" };
-const PLUS_ONLY_THEMES = ["TradeSet", "Original"]; // themes available on Ace Basic; everything else is AcePlus
 // ── PROMO MODE ──────────────────────────────────────────────────────────────
-// All AcePlus-gated features are temporarily unlocked for every user while we
+// All Journal Plus-gated features are temporarily unlocked for every user while we
 // run a free promo. To restore normal paywalling later, just flip this flag
 // back to false (or swap the isPlus body back to `state.plan === "plus"`).
 const PROMO_ALL_FEATURES_FREE = true;
@@ -273,7 +257,7 @@ function UpgradeGate({ title, desc, dispatch }) {
         <div style={{ marginBottom: 10 }}><PlusBadge /></div>
         <div style={{ fontWeight: 800, fontSize: 19, marginBottom: 8 }}>{title}</div>
         <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 24, lineHeight: 1.6 }}>{desc}</div>
-        <Btn variant="gradient" onClick={() => dispatch({ type: "OPEN_MODAL", modal: "upgrade" })} style={{ width: "100%", justifyContent: "center" }}>✨ Upgrade to AcePlus — $10/mo</Btn>
+        <Btn variant="gradient" onClick={() => dispatch({ type: "OPEN_MODAL", modal: "upgrade" })} style={{ width: "100%", justifyContent: "center" }}>✨ Upgrade to Journal Plus — $10/mo</Btn>
       </div>
     </div>
   );
@@ -298,7 +282,7 @@ function WelcomeModal({ state, dispatch }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && dispatch({ type: "CLOSE_MODAL" })}>
       <div className="fade-in" style={{ background: C.modalBg, border: `1px solid ${C.borderLight}`, borderRadius: 18, padding: 32, width: "100%", maxWidth: 420, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 14, color: C.accent }}>♤</div>
+        <div style={{ fontSize: 40, marginBottom: 14, color: C.accent }}>✓</div>
         <h2 style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.4, marginBottom: 10 }}>
           Welcome {name}, 8 Figures Trader.
         </h2>
@@ -330,27 +314,27 @@ function UpgradeModal({ state, dispatch }) {
       <div className="fade-in" style={{ background: C.modalBg, border: `1px solid ${C.borderLight}`, borderRadius: 18, padding: 28, width: "100%", maxWidth: 620, maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
           <div style={{ flex: 1 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800 }}>Upgrade to AcePlus</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 800 }}>Upgrade to Journal Plus</h2>
             <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Unlock the full trading journal.</div>
           </div>
           <button onClick={() => dispatch({ type: "CLOSE_MODAL" })} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, width: 32, height: 32, color: C.textMuted, fontSize: 20, cursor: "pointer" }}>×</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, margin: "20px 0" }}>
           <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Ace Basic</div>
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Journal Basic</div>
             <div style={{ fontSize: 12, color: C.textDim, marginBottom: 14 }}>Free, forever</div>
             <div className="mono" style={{ fontSize: 26, fontWeight: 800 }}>$0</div>
           </div>
           <div style={{ background: `linear-gradient(160deg, ${C.blue}18, ${C.purple}18)`, border: `1px solid ${C.purple}55`, borderRadius: 14, padding: 20, position: "relative" }}>
             <div style={{ position: "absolute", top: -10, right: 16 }}><PlusBadge /></div>
-            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>AcePlus</div>
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Journal Plus</div>
             <div style={{ fontSize: 12, color: C.textDim, marginBottom: 14 }}>Full access, cancel anytime</div>
             <div className="mono" style={{ fontSize: 26, fontWeight: 800 }}>$10<span style={{ fontSize: 13, color: C.textDim, fontWeight: 600 }}>/mo</span></div>
           </div>
         </div>
         <div style={{ overflowX: "auto", marginBottom: 22 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr>{["Feature", "Ace Basic", "AcePlus"].map((h, i) => <th key={h} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 10px", fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>{h}</th>)}</tr></thead>
+            <thead><tr>{["Feature", "Journal Basic", "Journal Plus"].map((h, i) => <th key={h} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 10px", fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>{h}</th>)}</tr></thead>
             <tbody>
               {FEATURES.map(([f, basic, plusVal]) => (
                 <tr key={f} style={{ borderBottom: `1px solid ${C.border}20` }}>
@@ -364,12 +348,12 @@ function UpgradeModal({ state, dispatch }) {
         </div>
         {plus ? (
           <>
-            <div style={{ background: C.accentDim, border: `1px solid ${C.accent}44`, borderRadius: 10, padding: "12px 14px", fontSize: 13, color: C.accent, marginBottom: 12 }}>✓ You're already on AcePlus. Thanks for supporting THE ACE LOUNGE!</div>
-            <Btn variant="ghost" onClick={() => dispatch({ type: "SET_PLAN", plan: "free" })} style={{ width: "100%", justifyContent: "center" }}>Downgrade to Ace Basic</Btn>
+            <div style={{ background: C.accentDim, border: `1px solid ${C.accent}44`, borderRadius: 10, padding: "12px 14px", fontSize: 13, color: C.accent, marginBottom: 12 }}>✓ You're already on Journal Plus. Thanks for supporting DR. JOURNAL!</div>
+            <Btn variant="ghost" onClick={() => dispatch({ type: "SET_PLAN", plan: "free" })} style={{ width: "100%", justifyContent: "center" }}>Downgrade to Journal Basic</Btn>
           </>
         ) : (
           <>
-            <Btn variant="gradient" onClick={() => dispatch({ type: "SET_PLAN", plan: "plus" })} style={{ width: "100%", justifyContent: "center", padding: "14px 0", fontSize: 15 }}>✨ Activate AcePlus</Btn>
+            <Btn variant="gradient" onClick={() => dispatch({ type: "SET_PLAN", plan: "plus" })} style={{ width: "100%", justifyContent: "center", padding: "14px 0", fontSize: 15 }}>✨ Activate Journal Plus</Btn>
             <div style={{ fontSize: 11, color: C.textDim, textAlign: "center", marginTop: 10 }}>Demo mode — no card charged. Wire this button to real billing (e.g. Stripe Checkout) before launch.</div>
           </>
         )}
@@ -489,7 +473,7 @@ function buildLiveCapitalMonthly(state) {
 }
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
-const STORAGE_KEY = "acezella_v3";
+const STORAGE_KEY = "dr_journal_v3";
 function loadData() { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
 function saveData(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} }
 
@@ -566,11 +550,11 @@ function genDemoData() {
 
 function defaultState() {
   return {
-    users: [{ id: "u1", email: "demo@acezella.io", password: "demo123", name: "Ace Trader" }],
+    users: [{ id: "u1", email: "demo@dr_journal.io", password: "demo123", name: "Ace Trader" }],
     currentUser: null, modal: null, activeAccount: "all",
     trades: [],
     accounts: [
-      { id: "acc1", name: "THE ACE LOUNGE", type: "Funded", color: C.accent },
+      { id: "acc1", name: "DR. JOURNAL", type: "Funded", color: C.accent },
     ],
     strategies: [
       { id: "s1", name: "Celery", color: C.accent, description: "Breakout with an additional confirmation candlestick", rules: ["Confirm bias on higher TF", "Wait for confirmation candle", "Enter on retest"] },
@@ -602,17 +586,17 @@ function defaultState() {
       { id: "fp5", firmId: "pf4", gross: 950, splitPct: 65, date: "2025-12-01", certificateUrl: "", notes: "December payout" },
       { id: "fp6", firmId: "pf1", gross: 1800, splitPct: 80, date: "2026-01-28", certificateUrl: "", notes: "January payout - best month yet" },
     ],
-    siteName: "THE ACE LOUNGE",
+    siteName: "DR. JOURNAL",
     // Pre-session ritual: a short Arrive / Breathe / Your Lean / Commit flow
     // shown once per main session (Asian / London / New York) per day,
     // before the person can reach the rest of the journal.
     ritual: { enabled: true },
     ritualLog: {}, // { "2026-08-06_London": { intention, skipped, completedAt } }
     pnlDisplayMode: "money", // "money" | "percent" — global $ / % toggle for trade-level P&L displays
-    plan: "free", // "free" (Ace Basic) | "plus" (AcePlus $10/mo)
-    theme: { name: "Original", mode: "night" },
+    plan: "free", // "free" (Journal Basic) | "plus" (Journal Plus $10/mo)
+    theme: { name: "Neon", mode: "night" },
     themeSchemaVersion: THEME_SCHEMA_VERSION,
-    uiTransparency: 90,
+    uiTransparency: 20,
     popupTransparency: 0,
     watermark: { mode: "spade", dataUrl: null, opacity: 20 }, // mode: "spade" | "logo" | "custom"
     privacy: { enabled: false, blurOnBlur: true, disableRightClick: true, disableCopy: true, watermarkOverlay: true, blockPrint: true },
@@ -670,7 +654,7 @@ function blankState() {
 // (who have a saved theme/transparency in localStorage) get migrated onto
 // the new look automatically instead of staying stuck on an older default.
 // Their trades, accounts, notes, etc. are untouched — only appearance resets.
-const THEME_SCHEMA_VERSION = 2;
+const THEME_SCHEMA_VERSION = 3;
 
 // Bump this whenever the *default* sessions/emotions lists (or the seeded
 // demo trades) change, so returning users on an older reference-list
@@ -684,7 +668,7 @@ const REFERENCE_LISTS_SCHEMA_VERSION = 4;
 
 // Bump this whenever the *default* accounts list changes, so returning users
 // still sitting on the old two-account "Pipstone 100K Funded / Pipstone BOGO"
-// demo default get migrated onto the single "THE ACE LOUNGE" account automatically.
+// demo default get migrated onto the single "DR. JOURNAL" account automatically.
 // Any trades logged against the old second account ("acc2") are remapped
 // onto "acc1" so nothing gets silently hidden or deleted.
 const ACCOUNTS_SCHEMA_VERSION = 2;
@@ -846,7 +830,7 @@ function SpadeLoader({ label = "Loading…" }) {
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: C.textMuted, fontSize: 14 }}>
       <div style={{ display: "flex", gap: 10 }}>
         {[0, 1, 2].map(i => (
-          <span key={i} style={{ fontSize: 30, color: C.accent, display: "inline-block", animation: "spadeBounce 1.2s ease-in-out infinite", animationDelay: `${i * 0.15}s` }}>♤</span>
+          <span key={i} style={{ fontSize: 30, color: C.accent, display: "inline-block", animation: "spadeBounce 1.2s ease-in-out infinite", animationDelay: `${i * 0.15}s` }}>✓</span>
         ))}
       </div>
       <div>{label}</div>
@@ -1105,7 +1089,7 @@ function AuthScreen({ state, dispatch }) {
   const [email, setEmail] = useState(""), [password, setPassword] = useState(""), [name, setName] = useState(""), [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showSignupNotice, setShowSignupNotice] = useState(false);
-  const SIGNUP_CONTACT_EMAIL = "theacefutures@gmail.com";
+  const SIGNUP_CONTACT_EMAIL = "itsdrticks@gmail.com";
   const login = async () => {
     if (!email || !password) { setError("Email and password required."); return; }
     setError(""); setBusy(true);
@@ -1132,7 +1116,7 @@ function AuthScreen({ state, dispatch }) {
       <div style={{ width: "100%", maxWidth: 440 }} className="fade-in">
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <img src={logoUrl} alt="" style={{ width: 88, height: 88, borderRadius: 20, marginBottom: 14, objectFit: "cover" }} />
-          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -1, fontFamily: "'Inter', sans-serif", ...gradientTextStyle() }}>{state.siteName || "THE ACE LOUNGE"}</div>
+          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -1, fontFamily: "'Inter', sans-serif", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
           <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 4, textTransform: "uppercase", marginTop: 4 }}>Trading Journal</div>
         </div>
         <Card style={{ padding: 32 }}>
@@ -1153,7 +1137,10 @@ function AuthScreen({ state, dispatch }) {
           </div>
           <Btn variant="ghost" onClick={() => { if (mode === "login") { setShowSignupNotice(true); return; } setMode("login"); setError(""); }} style={{ width: "100%", justifyContent: "center" }}>{mode === "login" ? "Need an account? Sign up" : "Already have an account? Sign in"}</Btn>
         </Card>
-        <div style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: C.textDim }}>Contact To Sign Up: theacefutures@gmail.com </div>
+        <div style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: C.textDim }}>Contact To Sign Up: itsdrticks@gmail.com </div>
+        <div style={{ textAlign: "center", marginTop: 8 }}>
+          <a href="https://www.instagram.com/dr.ticks/" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: C.accent, fontWeight: 700, textDecoration: "none" }}>📷 Follow @dr.ticks on Instagram</a>
+        </div>
       </div>
       {showSignupNotice && (
         <div
@@ -1603,7 +1590,9 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
 
       <button title="Settings" onClick={() => setPage("settings")} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.textMuted, width: 34, height: 34, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>⚙️</button>
 
-      <a href="mailto:theacefutures@gmail.com" style={{ display: "flex", alignItems: "center", gap: 6, color: C.textMuted, fontSize: 13, fontWeight: 600, textDecoration: "none", padding: "8px 6px", whiteSpace: "nowrap" }}>✉ Contact Us</a>
+      <a href="mailto:itsdrticks@gmail.com" style={{ display: "flex", alignItems: "center", gap: 6, color: C.textMuted, fontSize: 13, fontWeight: 600, textDecoration: "none", padding: "8px 6px", whiteSpace: "nowrap" }}>✉ Contact Us</a>
+
+      <a href="https://www.instagram.com/dr.ticks/" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: C.accent, fontSize: 13, fontWeight: 700, textDecoration: "none", padding: "8px 6px", whiteSpace: "nowrap" }}>📷 Follow @dr.ticks</a>
 
       {/* Session control */}
       <div style={{ position: "relative" }}>
@@ -1634,7 +1623,7 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
 }
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-const NAV = [{ id: "dashboard", icon: "♤", label: "Dashboard" }, { id: "journal", icon: "♤", label: "Trades" }, { id: "preparation", icon: "🧘", label: "Preparation" }, { id: "strategies", icon: "♤", label: "Playbook" }, { id: "analytics", icon: "♤", label: "Analytics", plus: true }, { id: "myrecord", icon: "♤", label: "My Record", plus: true }, { id: "mynotes", icon: "♤", label: "My Notes", plus: true }, { id: "emotions", icon: "♤", label: "Edge Score", plus: true }, { id: "finances", icon: "♤", label: "Prop Firms", plus: true }, { id: "livecapital", icon: "♤", label: "Live Capital", plus: true }];
+const NAV = [{ id: "dashboard", icon: "✓", label: "Dashboard" }, { id: "journal", icon: "✓", label: "Trades" }, { id: "preparation", icon: "🧘", label: "Preparation" }, { id: "strategies", icon: "✓", label: "Playbook" }, { id: "analytics", icon: "✓", label: "Analytics", plus: true }, { id: "myrecord", icon: "✓", label: "My Record", plus: true }, { id: "mynotes", icon: "✓", label: "My Notes", plus: true }, { id: "emotions", icon: "✓", label: "Edge Score", plus: true }, { id: "finances", icon: "✓", label: "Prop Firms", plus: true }, { id: "livecapital", icon: "✓", label: "Live Capital", plus: true }];
 
 function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
   const ritualDue = state.ritual?.enabled !== false && !state.ritualLog?.[ritualKeyFor(new Date())];
@@ -1647,7 +1636,7 @@ function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
             <img src={logoUrl} alt="" style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, objectFit: "cover" }} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, fontFamily: "'Inter', sans-serif", letterSpacing: -0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...gradientTextStyle() }}>{state.siteName || "THE ACE LOUNGE"}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, fontFamily: "'Inter', sans-serif", letterSpacing: -0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
               <div style={{ fontSize: 9, color: C.accent, letterSpacing: 3, textTransform: "uppercase", marginTop: 2, opacity: 0.85 }}>Trading Journal</div>
             </div>
           </div>
@@ -1895,7 +1884,7 @@ function ScreenshotUploader({ screenshots = [], onChange, max = 4, locked, userI
         </>
       )}
       {error && <div style={{ fontSize: 11, color: C.red, marginTop: 8 }}>{error}</div>}
-      {locked && screenshots.length >= max && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Ace Basic allows {max} screenshot per trade. Upgrade to AcePlus for up to 6.</div>}
+      {locked && screenshots.length >= max && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Journal Basic allows {max} screenshot per trade. Upgrade to Journal Plus for up to 6.</div>}
     </div>
   );
 }
@@ -2163,9 +2152,9 @@ function AddTradeModal({ state, dispatch }) {
         <div className="fade-in" style={{ background: C.modalBg, border: `1px solid ${C.borderLight}`, borderRadius: 18, padding: 30, width: "100%", maxWidth: 420, textAlign: "center" }}>
           <div style={{ width: 52, height: 52, borderRadius: 14, background: C.purpleDim, color: C.purple, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 16px" }}>🔒</div>
           <div style={{ marginBottom: 8 }}><PlusBadge /></div>
-          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Ace Basic trade limit reached</div>
-          <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 22, lineHeight: 1.6 }}>You've logged {state.trades.length} of {FREE_LIMITS.maxTrades} trades available on Ace Basic. Upgrade to AcePlus for unlimited trades.</div>
-          <Btn variant="gradient" onClick={() => dispatch({ type: "OPEN_MODAL", modal: "upgrade" })} style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}>✨ Upgrade to AcePlus</Btn>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Journal Basic trade limit reached</div>
+          <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 22, lineHeight: 1.6 }}>You've logged {state.trades.length} of {FREE_LIMITS.maxTrades} trades available on Journal Basic. Upgrade to Journal Plus for unlimited trades.</div>
+          <Btn variant="gradient" onClick={() => dispatch({ type: "OPEN_MODAL", modal: "upgrade" })} style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}>✨ Upgrade to Journal Plus</Btn>
           <Btn variant="ghost" onClick={() => dispatch({ type: "CLOSE_MODAL" })} style={{ width: "100%", justifyContent: "center" }}>Close</Btn>
         </div>
       </div>
@@ -2260,7 +2249,7 @@ function AddTradeModal({ state, dispatch }) {
             <div style={{ flex: 1, fontSize: 14, fontWeight: 700 }}>Setup / Strategy</div>
             <button onClick={() => canAddSetup(state) ? setAddingSetup(a => !a) : dispatch({ type: "OPEN_MODAL", modal: "upgrade" })} style={{ background: "none", border: "none", color: canAddSetup(state) ? C.accent : C.textDim, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>+ Add New Setup {!canAddSetup(state) && <PlusBadge small />}</button>
           </div>
-          {!canAddSetup(state) && <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>Ace Basic is limited to {FREE_LIMITS.maxSetups} Playbook setups — you can still use your existing ones below.</div>}
+          {!canAddSetup(state) && <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>Journal Basic is limited to {FREE_LIMITS.maxSetups} Playbook setups — you can still use your existing ones below.</div>}
           {addingSetup && (
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <input value={newSetupName} onChange={e => setNewSetupName(e.target.value)} placeholder="New setup name…" style={{ ...modalInputStyle, flex: 1, minWidth: 0 }} />
@@ -2395,7 +2384,7 @@ function AddTradeModal({ state, dispatch }) {
             </>
           ) : (
             <div style={{ marginBottom: 18 }}>
-              <InlineUpgradeLock dispatch={dispatch} text="Logging Primary Emotion, Outcome Neutrality, and Exit Behavior is an AcePlus feature — this data powers your Edge Score." />
+              <InlineUpgradeLock dispatch={dispatch} text="Logging Primary Emotion, Outcome Neutrality, and Exit Behavior is a Journal Plus feature — this data powers your Edge Score." />
             </div>
           )}
 
@@ -2528,7 +2517,7 @@ function ShareModal({ trade, dispatch }) {
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const SHARE_CARD_W = 1080;
 const SHARE_CHART_H = { wide: 460, tall: 660 };
-const SHARE_BRAND = "THE ACE LOUNGE";
+const SHARE_BRAND = "DR. JOURNAL";
 
 function loadImageFromURL(url) {
   return new Promise((resolve, reject) => {
@@ -2676,11 +2665,11 @@ function drawShareChartCrop(ctx, img, x, y, w, h, zoom, offsetXFrac, offsetYFrac
 // chart region only) and the full card export (whole layout) — see below.
 function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
   const { W, H, pad, headerY, headerH, statsY, statsH, chartY, chartH, quoteY, quoteH, taglineY } = layout;
-  const pnlColor = trade.outcome === "BE" ? "#f5a623" : trade.pnl >= 0 ? "#32D18D" : "#ff4466";
+  const pnlColor = trade.outcome === "BE" ? "#FFD400" : trade.pnl >= 0 ? "#A1E503" : "#FF2965";
   const isLong = /long|buy/i.test(trade.direction || "");
-  const dirColor = isLong ? "#32D18D" : "#4488ff";
+  const dirColor = isLong ? "#A1E503" : "#00E5FF";
   const outcomeIcon = trade.outcome === "Win" ? "outcome-win" : trade.outcome === "Loss" ? "outcome-loss" : "outcome-be";
-  const bg = "#080b14";
+  const bg = "#050505";
 
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   const glow = ctx.createRadialGradient(60, 20, 0, 60, 20, 420);
@@ -2693,9 +2682,9 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
     drawShareChartCrop(ctx, logoImg, pad, headerY, 64, 64, 1, 0, 0);
     ctx.restore();
   } else {
-    ctx.fillStyle = "#32D18D"; roundRectPath(ctx, pad, headerY, 64, 64, 16); ctx.fill();
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#04140d"; ctx.font = "24px Inter, sans-serif";
-    ctx.fillText("♠", pad + 32, headerY + 32);
+    ctx.fillStyle = "#A1E503"; roundRectPath(ctx, pad, headerY, 64, 64, 16); ctx.fill();
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000000"; ctx.font = "24px Inter, sans-serif";
+    ctx.fillText("✓", pad + 32, headerY + 32);
   }
   ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#f2f4f9"; ctx.font = "800 25px Inter, sans-serif";
   ctx.fillText(SHARE_BRAND, pad + 80, headerY + 28);
@@ -2704,7 +2693,7 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
 
   // ── Stats block ─────────────────────────────────────────────────────────
   // corner brackets
-  ctx.strokeStyle = "#32D18D80"; ctx.lineWidth = 2;
+  ctx.strokeStyle = "#A1E50380"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(pad - 8, statsY + 16); ctx.lineTo(pad - 8, statsY - 8); ctx.lineTo(pad + 16, statsY - 8); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(W - pad - 16, statsY - 8); ctx.lineTo(W - pad + 8, statsY - 8); ctx.lineTo(W - pad + 8, statsY + 16); ctx.stroke();
 
@@ -2729,7 +2718,7 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
   const rows = [
     ["direction-" + (isLong ? "long" : "short"), dirColor, "DIRECTION", (trade.direction || "—").toUpperCase()],
     ["session", "#c9a9ff", "SESSION", (trade.session || "—").toUpperCase()],
-    ["setup", "#f5a623", "SETUP", trade.setup || "—"],
+    ["setup", "#FFD400", "SETUP", trade.setup || "—"],
     [outcomeIcon, pnlColor, "OUTCOME", (trade.outcome || "—").toUpperCase() + (pipsKnown ? `  (${trade.pips > 0 ? "+" : ""}${trade.pips}p)` : "")],
   ];
   const rowH = statsH / 4;
@@ -2759,13 +2748,13 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
   ctx.fillStyle = "#ffffff08"; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.fill();
   ctx.strokeStyle = "#ffffff14"; ctx.lineWidth = 1; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.stroke();
   // giant faint decorative quote mark
-  ctx.textAlign = "right"; ctx.fillStyle = "#32D18D14"; ctx.font = "800 150px Georgia, serif";
+  ctx.textAlign = "right"; ctx.fillStyle = "#A1E50314"; ctx.font = "800 150px Georgia, serif";
   ctx.fillText("”", W - pad - 20, quoteY + 130);
 
   const iconCx = pad + 46, iconCy = quoteY + 46;
-  ctx.fillStyle = "#32D18D1a"; ctx.beginPath(); ctx.arc(iconCx, iconCy, 26, 0, Math.PI * 2); ctx.fill();
-  drawTargetIcon(ctx, iconCx, iconCy, 15, "#32D18D");
-  ctx.textAlign = "left"; ctx.fillStyle = "#32D18D"; ctx.font = "700 14px Inter, sans-serif";
+  ctx.fillStyle = "#A1E5031a"; ctx.beginPath(); ctx.arc(iconCx, iconCy, 26, 0, Math.PI * 2); ctx.fill();
+  drawTargetIcon(ctx, iconCx, iconCy, 15, "#A1E503");
+  ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 14px Inter, sans-serif";
   ctx.fillText("D A I L Y   M I N D S E T", pad + 88, quoteY + 40);
 
   ctx.font = "italic 600 22px Inter, sans-serif"; ctx.fillStyle = "#d7dae4";
@@ -3149,7 +3138,7 @@ function PublicTradeView({ id }) {
       {lightboxIndex !== null && <ImageLightbox images={shotUrls} labels={shotLabels} index={lightboxIndex} onClose={() => setLightboxIndex(null)} onNavigate={setLightboxIndex} />}
       <div style={{ textAlign: "center", marginBottom: 28 }}>
         <img src={logoUrl} alt="" style={{ width: 44, height: 44, borderRadius: 12, marginBottom: 8, objectFit: "cover" }} />
-        <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, fontFamily: "'Inter', sans-serif" }}>THE ACE LOUNGE</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, fontFamily: "'Inter', sans-serif" }}>DR. JOURNAL</div>
         <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 3, textTransform: "uppercase" }}>Shared Trade</div>
       </div>
       <Card style={{ marginBottom: 16 }}>
@@ -3189,7 +3178,7 @@ function PublicTradeView({ id }) {
           </div>
         </Card>
       )}
-      <div style={{ textAlign: "center", marginTop: 24, fontSize: 12, color: C.textDim }}>Shared via THE ACE LOUNGE Trading Journal</div>
+      <div style={{ textAlign: "center", marginTop: 24, fontSize: 12, color: C.textDim }}>Shared via DR. JOURNAL Trading Journal</div>
     </div>
   );
 }
@@ -3448,7 +3437,7 @@ function DashboardCalendarSection({ state, dispatch, onSelectTrade, setPage }) {
                         ) : (
                           <>
                             <span className="mono" style={{ fontWeight: 800, fontSize: 14, color: col }}>{fmt$(t.pnl)}</span>
-                            <span style={{ fontSize: 12, color: col }}>♤</span>
+                            <span style={{ fontSize: 12, color: col }}>✓</span>
                           </>
                         )}
                       </div>
@@ -3476,7 +3465,7 @@ function DashboardCalendarSection({ state, dispatch, onSelectTrade, setPage }) {
               <button
                 onClick={() => { setPopup(null); setPage && setPage("journal"); }}
                 style={{ width: "100%", background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 14, padding: "13px 0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", letterSpacing: 0.3 }}>
-                <span style={{ fontSize: 15 }}>♤</span> View on Trades page
+                <span style={{ fontSize: 15 }}>✓</span> View on Trades page
               </button>
             </div>
           </div>
@@ -3578,7 +3567,7 @@ function Dashboard({ state, dispatch, setPage }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 28, color: C.accent, lineHeight: 1 }}>♤</span>
+            <span style={{ fontSize: 28, color: C.accent, lineHeight: 1 }}>✓</span>
             <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1, color: C.accent }}>Dashboard</h1>
           </div>
           <div style={{ fontSize: 15, color: C.textMuted, marginTop: 4 }}>Your trading performance at a glance</div>
@@ -3797,7 +3786,7 @@ function Journal({ state, dispatch, setPage }) {
   return (
     <div className="fade-in" style={{ height: "100%", overflow: "hidden", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, flex: 1, color: C.accent }}>♤ Trades</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, flex: 1, color: C.accent }}>✓ Trades</h1>
         <Btn small variant="gradient2" onClick={() => isPlus(state) ? (setPage && setPage("import")) : dispatch({ type: "OPEN_MODAL", modal: "upgrade" })}>Import Trades {!isPlus(state) && <PlusBadge small />}</Btn>
         <div style={{ position: "relative" }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 14px 8px 34px", fontSize: 13, outline: "none", width: 200 }} />
@@ -3841,7 +3830,7 @@ function Journal({ state, dispatch, setPage }) {
                         ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.accentDim, color: C.accent, borderRadius: 7, padding: "4px 10px", fontWeight: 700, fontSize: 12 }}>👁 See details</span>
                         : fmtDate(t.date))}
                       {td(<b>{t.symbol}</b>)}
-                      {td(<Badge color={t.direction === "Long" ? C.accent : C.red}>{t.direction === "Long" ? "♤ LONG" : "♤ SHORT"}</Badge>)}
+                      {td(<Badge color={t.direction === "Long" ? C.accent : C.red}>{t.direction === "Long" ? "✓ LONG" : "✓ SHORT"}</Badge>)}
                       {td(t.setup ? <Badge color={strat?.color || hashColor(t.setup)}>{t.setup}</Badge> : "—")}
                       {td(t.timeframe ? <Badge color={timeframeColor(t.timeframe)}>{t.timeframe}</Badge> : "—")}
                       {td(t.session ? <Badge color={hashColor(t.session)}>{t.session}</Badge> : "—")}
@@ -4151,7 +4140,7 @@ function ImportReview({ review, accounts, onCancel, onConfirm }) {
                   <td style={{ padding: "8px 12px" }}><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggle(t.id)} style={{ width: 16, height: 16 }} /></td>
                   <td style={{ padding: "8px 12px", fontSize: 13 }}>{fmtDate(t.date)} {t.openTime}</td>
                   <td style={{ padding: "8px 12px", fontSize: 13, fontWeight: 700 }}>{t.symbol}</td>
-                  <td style={{ padding: "8px 12px" }}><Badge color={t.direction === "Long" ? C.accent : C.red}>{t.direction === "Long" ? "♤ LONG" : "♤ SHORT"}</Badge></td>
+                  <td style={{ padding: "8px 12px" }}><Badge color={t.direction === "Long" ? C.accent : C.red}>{t.direction === "Long" ? "✓ LONG" : "✓ SHORT"}</Badge></td>
                   <td style={{ padding: "8px 12px" }}>{t.session ? <Badge color={hashColor(t.session)}>{t.session}</Badge> : "—"}</td>
                   <td style={{ padding: "8px 12px", fontSize: 13 }}>{t.size}</td>
                   <td style={{ padding: "8px 12px", fontSize: 13, fontWeight: 700, color: t.pnl > 0 ? C.accent : t.pnl < 0 ? C.red : C.textMuted }}>{fmt$(t.pnl)}</td>
@@ -4326,7 +4315,7 @@ function MyRecord({ state }) {
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>♤</span> My Record</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> My Record</h1>
         <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Your green day vs. red day track record — lifetime, this year, and this month.</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -4469,7 +4458,7 @@ function MyNotes({ state, dispatch }) {
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.accent }}>♤ My Notes</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.accent }}>✓ My Notes</h1>
         <div style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", marginTop: 4 }}>"For as a man thinks in his heart, so is he"</div>
       </div>
 
@@ -5489,11 +5478,11 @@ function Strategies({ state, dispatch }) {
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, flex: 1, color: C.accent }}>♤ Playbook</h1>
-        {atCap && <Badge color={C.purple}>{strategies.length}/{FREE_LIMITS.maxSetups} setups (Ace Basic)</Badge>}
+        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, flex: 1, color: C.accent }}>✓ Playbook</h1>
+        {atCap && <Badge color={C.purple}>{strategies.length}/{FREE_LIMITS.maxSetups} setups (Journal Basic)</Badge>}
         <Btn small onClick={openAdd}>+ New Setup {atCap && <PlusBadge small />}</Btn>
       </div>
-      {atCap && <InlineUpgradeLock dispatch={dispatch} text={`You've reached the Ace Basic limit of ${FREE_LIMITS.maxSetups} Playbook setups. Upgrade to AcePlus for unlimited setups.`} />}
+      {atCap && <InlineUpgradeLock dispatch={dispatch} text={`You've reached the Journal Basic limit of ${FREE_LIMITS.maxSetups} Playbook setups. Upgrade to Journal Plus for unlimited setups.`} />}
       {adding && !atCap && (
         <Card style={{ borderColor: C.accentHover }}>
           <h3 style={{ marginBottom: 14, fontSize: 16, fontWeight: 700 }}>New Setup</h3>
@@ -5693,7 +5682,7 @@ function Calendar({ state, dispatch, setPage }) {
         {recentTrades.map(t => (
           <div key={t.id} onClick={() => openTrade(t.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 20px", borderTop: hoverId === t.id ? `1px solid ${C.accent}` : "1px solid transparent", borderBottom: hoverId === t.id ? `1px solid ${C.accent}` : `1px solid ${C.border}20`, cursor: "pointer", background: hoverId === t.id ? C.surfaceHigh : "transparent", transition: "background 0.12s, border-color 0.12s" }}
             onMouseEnter={() => setHoverId(t.id)} onMouseLeave={() => setHoverId(null)}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: outcomeColor(t.outcome, t.pnl) + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: outcomeColor(t.outcome, t.pnl) }}>{t.direction === "Long" ? "♤" : "♤"}</div>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: outcomeColor(t.outcome, t.pnl) + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: outcomeColor(t.outcome, t.pnl) }}>{t.direction === "Long" ? "✓" : "✓"}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{t.symbol}</div>
               <div style={{ fontSize: 12, color: C.textMuted }}>{fmtDate(t.date)} · {t.direction.toUpperCase()}</div>
@@ -6208,7 +6197,7 @@ function LongShortCards({ trades }) {
       <SectionLabel>Long vs Short Performance</SectionLabel>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Card>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}><span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Long Trades</span><span style={{ color: C.accent }}>♤</span></div>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}><span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Long Trades</span><span style={{ color: C.accent }}>✓</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: C.textMuted }}>P&L:</span><b style={{ color: ls.netPnl >= 0 ? C.accent : C.red }}>{fmt$(ls.netPnl)}</b></div>
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: C.textMuted }}>Win Rate:</span><b>{ls.winRate.toFixed(1)}%</b></div>
@@ -6216,7 +6205,7 @@ function LongShortCards({ trades }) {
           </div>
         </Card>
         <Card>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}><span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Short Trades</span><span style={{ color: C.red }}>♤</span></div>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}><span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Short Trades</span><span style={{ color: C.red }}>✓</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: C.textMuted }}>P&L:</span><b style={{ color: ss.netPnl >= 0 ? C.accent : C.red }}>{fmt$(ss.netPnl)}</b></div>
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: C.textMuted }}>Win Rate:</span><b>{ss.winRate.toFixed(1)}%</b></div>
@@ -6310,7 +6299,7 @@ function Analytics({ state }) {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 22, color: C.accent }}>♤</span>
+          <span style={{ fontSize: 22, color: C.accent }}>✓</span>
           <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, color: C.accent }}>Analytics</h1>
         </div>
         <div style={{ flex: 1 }} />
@@ -6326,7 +6315,7 @@ function Analytics({ state }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
           <StatCard label="Net P&L" value={fmt$(stats.netPnl)} color={stats.netPnl >= 0 ? C.accent : C.red} icon="$" tone={stats.netPnl >= 0 ? "positive" : "negative"} />
           <StatCard label="Win Rate %" value={`${stats.winRate.toFixed(1)}%`} sub={`${stats.wins}W / ${stats.losses}L`} color={stats.winRate >= 50 ? C.accent : C.text} icon="◎" tone={stats.winRate >= 50 ? "positive" : "neutral"} />
-          <StatCard label="Total Trades" value={filtered.length} sub={`${stats.wins} wins`} icon="♤" tone="neutral" />
+          <StatCard label="Total Trades" value={filtered.length} sub={`${stats.wins} wins`} icon="✓" tone="neutral" />
           <StatCard label="Profit Factor" value={stats.profitFactor >= 99 ? "∞" : stats.profitFactor.toFixed(2)} color={C.accent} icon="🏆" tone="positive" />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginTop: 14 }}>
@@ -6352,10 +6341,10 @@ function Analytics({ state }) {
       <div>
         <SectionLabel>Trade Statistics</SectionLabel>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-          <StatCard label="Avg Win" value={fmt$(stats.avgWin)} color={C.accent} icon="♤" tone="positive" />
-          <StatCard label="Avg Loss" value={fmt$(-stats.avgLoss)} color={C.red} icon="♤" tone="negative" />
+          <StatCard label="Avg Win" value={fmt$(stats.avgWin)} color={C.accent} icon="✓" tone="positive" />
+          <StatCard label="Avg Loss" value={fmt$(-stats.avgLoss)} color={C.red} icon="✓" tone="negative" />
           <StatCard label="Largest Win" value={fmt$(largestWin)} color={C.accent} icon="🏆" tone="positive" />
-          <StatCard label="Largest Loss" value={fmt$(largestLoss)} color={C.red} icon="♤" tone="negative" />
+          <StatCard label="Largest Loss" value={fmt$(largestLoss)} color={C.red} icon="✓" tone="negative" />
         </div>
       </div>
 
@@ -6704,7 +6693,7 @@ function EmotionsScore({ state, dispatch, setPage }) {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 260 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>♤</span> Edge Score</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> Edge Score</h1>
           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Understand your emotional patterns and their impact on trading performance.</div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -7514,7 +7503,7 @@ function Finances({ state, dispatch }) {
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>♤</span> Prop Firms</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> Prop Firms</h1>
         <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Track expenses, payouts, and profit from your prop firms</div>
       </div>
       <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
@@ -7879,7 +7868,7 @@ function LiveCapitalSetup({ state, dispatch }) {
           <Sel label="Day of month" value={contrib.day} onChange={v => saveContrib({ ...contrib, day: parseInt(v) })} options={dayOptions} />
           <Inp label="Start date" type="date" value={contrib.startDate} onChange={v => saveContrib({ ...contrib, startDate: v })} />
         </div>
-        <AutoToggle on={contrib.autoAdd} onClick={() => saveContrib({ ...contrib, autoAdd: !contrib.autoAdd })} label="Automatically add this contribution" hint="When enabled, THE ACE LOUNGE will create and manage the deposit plan from these settings." />
+        <AutoToggle on={contrib.autoAdd} onClick={() => saveContrib({ ...contrib, autoAdd: !contrib.autoAdd })} label="Automatically add this contribution" hint="When enabled, DR. JOURNAL will create and manage the deposit plan from these settings." />
         <div style={{ background: C.bg, borderRadius: 10, padding: 16 }}>
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}><Badge color={C.accent}>Deposit</Badge><Badge color={C.blue}>Auto-add</Badge></div>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Deposit plan</div>
@@ -7896,7 +7885,7 @@ function LiveCapitalSetup({ state, dispatch }) {
           <Sel label="Day of month" value={withdraw.day} onChange={v => saveWithdraw({ ...withdraw, day: parseInt(v) })} options={dayOptions} />
           <Inp label="Start date" type="date" value={withdraw.startDate} onChange={v => saveWithdraw({ ...withdraw, startDate: v })} />
         </div>
-        <AutoToggle on={withdraw.autoAdd} onClick={() => saveWithdraw({ ...withdraw, autoAdd: !withdraw.autoAdd })} label="Automatically add this withdrawal" hint="When enabled, THE ACE LOUNGE will create and manage the withdrawal plan from these settings." />
+        <AutoToggle on={withdraw.autoAdd} onClick={() => saveWithdraw({ ...withdraw, autoAdd: !withdraw.autoAdd })} label="Automatically add this withdrawal" hint="When enabled, DR. JOURNAL will create and manage the withdrawal plan from these settings." />
         <div style={{ background: C.bg, borderRadius: 10, padding: 16 }}>
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}><Badge color={C.purple}>Withdrawal</Badge><Badge color={C.blue}>Auto-add</Badge></div>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Withdrawal plan</div>
@@ -8090,7 +8079,7 @@ function LiveCapital({ state, dispatch, setPage }) {
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 260 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>♤</span> Live Capital</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> Live Capital</h1>
           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Track live capital, drawdown, risk buffer, and account growth.</div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative" }}>
@@ -8154,7 +8143,7 @@ function Settings({ state, dispatch }) {
   const [editingAccId, setEditingAccId] = useState(null);
   const [editAccName, setEditAccName] = useState(""), [editAccType, setEditAccType] = useState("Funded"), [editAccColor, setEditAccColor] = useState(ACCOUNT_COLORS[0]);
   const [newSession, setNewSession] = useState(""), [newEmotion, setNewEmotion] = useState("");
-  const [siteNameInput, setSiteNameInput] = useState(state.siteName || "THE ACE LOUNGE");
+  const [siteNameInput, setSiteNameInput] = useState(state.siteName || "DR. JOURNAL");
   const [clearAllConfirm, setClearAllConfirm] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [toast, setToast] = useState("");
@@ -8193,13 +8182,7 @@ function Settings({ state, dispatch }) {
     notify("✓ Password updated.");
   };
 
-  const theme = state.theme || { name: "Original", mode: "night" };
-  const setThemeName = (name) => {
-    if (!isPlus(state) && !PLUS_ONLY_THEMES.includes(name)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; }
-    dispatch({ type: "SET_THEME", theme: { name } });
-  };
-  const setThemeMode = (mode) => dispatch({ type: "SET_THEME", theme: { mode } });
-  const saveSiteName = () => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; } dispatch({ type: "SET_SITE_NAME", name: siteNameInput.trim() || "THE ACE LOUNGE" }); };
+  const saveSiteName = () => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; } dispatch({ type: "SET_SITE_NAME", name: siteNameInput.trim() || "DR. JOURNAL" }); };
   const handleWatermarkUpload = (file) => {
     if (!file) return;
     if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; }
@@ -8211,7 +8194,7 @@ function Settings({ state, dispatch }) {
   // Export handlers
   const exportJSON = () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "acezella_backup.json"; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "dr_journal_backup.json"; a.click();
   };
 
   const exportCSV = () => {
@@ -8222,7 +8205,7 @@ function Settings({ state, dispatch }) {
     }).join(","));
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "the_ace_lounge_trades.csv"; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "dr_journal_trades.csv"; a.click();
   };
 
   const exportHTML = async () => {
@@ -8238,9 +8221,9 @@ function Settings({ state, dispatch }) {
       logoDataUrl = await new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob); });
     } catch {}
     const logoImgTag = logoDataUrl ? `<img src="${logoDataUrl}" alt="" style="width:40px;height:40px;border-radius:10px;vertical-align:middle;margin-right:12px;object-fit:cover" />` : "";
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>THE ACE LOUNGE — Trade Report</title><style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');body{font-family:'Inter',sans-serif;background:#020617;color:#e8eaf0;padding:32px}h1{color:#32D18D;display:flex;align-items:center}table{width:100%;border-collapse:collapse;margin-top:24px}th{background:#1e293b;padding:10px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px}td{padding:10px;border-bottom:1px solid #1e293b;font-size:13px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:24px 0}.stat{background:#0F172A;border:1px solid #1e293b;border-radius:12px;padding:16px}.stat-label{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}.stat-value{font-size:24px;font-weight:700;color:#32D18D;font-family:'Inter',sans-serif}</style></head><body><h1>${logoImgTag}THE ACE LOUNGE — Trade Report</h1><p style="color:#94a3b8">Generated ${new Date().toLocaleString()}</p><div class="stats"><div class="stat"><div class="stat-label">Net P&L</div><div class="stat-value">${fmt$(stats.netPnl)}</div></div><div class="stat"><div class="stat-label">Win Rate</div><div class="stat-value">${stats.winRate.toFixed(1)}%</div></div><div class="stat"><div class="stat-label">Total Pips</div><div class="stat-value">${stats.totalPips >= 0 ? "+" : ""}${stats.totalPips.toFixed(1)}</div></div><div class="stat"><div class="stat-label">Trades</div><div class="stat-value">${state.trades.length}</div></div></div><table><thead><tr><th>Date</th><th>Symbol</th><th>Direction</th><th>Outcome</th><th>P&L</th><th>Pips</th><th>Setup</th><th>Session</th><th>Mood</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DR. JOURNAL — Trade Report</title><style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');body{font-family:'Inter',sans-serif;background:#000000;color:#FEFEFE;padding:32px}h1{color:#A1E503;display:flex;align-items:center}table{width:100%;border-collapse:collapse;margin-top:24px}th{background:#1A1A1A;padding:10px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px}td{padding:10px;border-bottom:1px solid #242424;font-size:13px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:24px 0}.stat{background:#0A0A0A;border:1px solid #242424;border-radius:12px;padding:16px}.stat-label{font-size:11px;color:#A6A6A6;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}.stat-value{font-size:24px;font-weight:700;color:#A1E503;font-family:'Inter',sans-serif}</style></head><body><h1>${logoImgTag}DR. JOURNAL — Trade Report</h1><p style="color:#A6A6A6">Generated ${new Date().toLocaleString()}</p><div class="stats"><div class="stat"><div class="stat-label">Net P&L</div><div class="stat-value">${fmt$(stats.netPnl)}</div></div><div class="stat"><div class="stat-label">Win Rate</div><div class="stat-value">${stats.winRate.toFixed(1)}%</div></div><div class="stat"><div class="stat-label">Total Pips</div><div class="stat-value">${stats.totalPips >= 0 ? "+" : ""}${stats.totalPips.toFixed(1)}</div></div><div class="stat"><div class="stat-label">Trades</div><div class="stat-value">${state.trades.length}</div></div></div><table><thead><tr><th>Date</th><th>Symbol</th><th>Direction</th><th>Outcome</th><th>P&L</th><th>Pips</th><th>Setup</th><th>Session</th><th>Mood</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "the_ace_lounge_report.html"; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "dr_journal_report.html"; a.click();
   };
 
   const importJSON = (file) => {
@@ -8275,7 +8258,7 @@ function Settings({ state, dispatch }) {
 
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 22 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, color: C.accent }}>♤ Settings</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, color: C.accent }}>✓ Settings</h1>
 
       {/* Plan / Billing */}
       <Card style={{ background: isPlus(state) ? `linear-gradient(160deg, ${C.blue}14, ${C.purple}14)` : C.surface, borderColor: isPlus(state) ? C.purple + "55" : C.border }}>
@@ -8283,17 +8266,17 @@ function Settings({ state, dispatch }) {
           <div style={{ flex: 1, minWidth: 220 }}>
             <SectionLabel>Plan &amp; Billing</SectionLabel>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 800, fontSize: 18 }}>{PROMO_ALL_FEATURES_FREE ? "All Features Unlocked" : (PLAN_NAME[state.plan] || "Ace Basic")}</div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>{PROMO_ALL_FEATURES_FREE ? "All Features Unlocked" : (PLAN_NAME[state.plan] || "Journal Basic")}</div>
               {isPlus(state) && <PlusBadge />}
               {PROMO_ALL_FEATURES_FREE && <Badge color={C.yellow}>FREE PROMO</Badge>}
             </div>
             <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
               {PROMO_ALL_FEATURES_FREE
-                ? `You're on ${PLAN_NAME[state.plan] || "Ace Basic"}, but every AcePlus feature is free for everyone during our launch promo. Some features will move to a paid plan soon.`
+                ? `You're on ${PLAN_NAME[state.plan] || "Journal Basic"}, but every Journal Plus feature is free for everyone during our launch promo. Some features will move to a paid plan soon.`
                 : (isPlus(state) ? "Full access — $10/month." : "Free plan — limited trades, accounts, and setups. Upgrade for the full journal.")}
             </div>
           </div>
-          <Btn variant={isPlus(state) ? "ghost" : "gradient"} onClick={() => dispatch({ type: "OPEN_MODAL", modal: "upgrade" })}>{isPlus(state) ? "Manage Plan" : "✨ Upgrade to AcePlus"}</Btn>
+          <Btn variant={isPlus(state) ? "ghost" : "gradient"} onClick={() => dispatch({ type: "OPEN_MODAL", modal: "upgrade" })}>{isPlus(state) ? "Manage Plan" : "✨ Upgrade to Journal Plus"}</Btn>
         </div>
       </Card>
 
@@ -8326,7 +8309,7 @@ function Settings({ state, dispatch }) {
       <Card>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
           <div style={{ flex: 1 }}><SectionLabel>Accounts</SectionLabel></div>
-          {!isPlus(state) && <Badge color={C.purple}>{accounts.length}/{FREE_LIMITS.maxAccounts} (Ace Basic)</Badge>}
+          {!isPlus(state) && <Badge color={C.purple}>{accounts.length}/{FREE_LIMITS.maxAccounts} (Journal Basic)</Badge>}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
           {accounts.map(a => {
@@ -8412,7 +8395,7 @@ function Settings({ state, dispatch }) {
             <Btn onClick={addAccount}>Add Account</Btn>
           </div>
         ) : (
-          <InlineUpgradeLock dispatch={dispatch} text={`Ace Basic supports ${FREE_LIMITS.maxAccounts} account. Upgrade to AcePlus to add unlimited accounts.`} />
+          <InlineUpgradeLock dispatch={dispatch} text={`Journal Basic supports ${FREE_LIMITS.maxAccounts} account. Upgrade to Journal Plus to add unlimited accounts.`} />
         )}
       </Card>
 
@@ -8425,46 +8408,58 @@ function Settings({ state, dispatch }) {
         {isPlus(state) ? (
           <>
             <div style={{ display: "flex", gap: 10, maxWidth: 460 }}>
-              <Inp value={siteNameInput} onChange={setSiteNameInput} placeholder="THE ACE LOUNGE" style={{ flex: 1 }} />
+              <Inp value={siteNameInput} onChange={setSiteNameInput} placeholder="DR. JOURNAL" style={{ flex: 1 }} />
               <Btn onClick={saveSiteName}>Save</Btn>
             </div>
             <div style={{ fontSize: 12, color: C.textDim, marginTop: 8 }}>Shown in the sidebar and on the sign-in screen.</div>
           </>
         ) : (
-          <InlineUpgradeLock dispatch={dispatch} text={`Renaming the app from "${state.siteName || "THE ACE LOUNGE"}" is an AcePlus feature.`} />
+          <InlineUpgradeLock dispatch={dispatch} text={`Renaming the app from "${state.siteName || "DR. JOURNAL"}" is a Journal Plus feature.`} />
         )}
       </Card>
 
       <Card>
-        <SectionLabel>Color Theme</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 18 }}>
-          {Object.entries(THEMES).map(([name, t]) => {
-            const active = theme.name === name;
-            const locked = !isPlus(state) && !PLUS_ONLY_THEMES.includes(name);
-            return (
-              <div key={name} onClick={() => setThemeName(name)} style={{ border: `2px solid ${active ? t.accent : C.border}`, borderRadius: 12, padding: "14px 12px", textAlign: "center", cursor: "pointer", background: active ? t.accent + "0f" : "transparent", position: "relative", opacity: locked ? 0.6 : 1 }}>
-                {locked && <div style={{ position: "absolute", top: 8, right: 8 }}><PlusBadge small /></div>}
-                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 10 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#fff" }} />
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#020617", border: `1px solid ${C.border}` }} />
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: active ? t.accent : C.text, marginBottom: 8 }}>{name}</div>
-                <div style={{ height: 3, borderRadius: 2, background: t.accent, width: "60%", margin: "0 auto" }} />
-              </div>
-            );
-          })}
+        <SectionLabel>Theme</SectionLabel>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>DR. JOURNAL runs one locked-in neon theme built from the brand mark — no picker, no light mode.</div>
+        <div style={{ border: `2px solid ${C.accent}`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, background: C.accent + "0f", maxWidth: 460 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ width: 26, height: 26, borderRadius: "50%", background: C.accent, boxShadow: `0 0 10px ${C.accent}88` }} />
+            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#000000", border: `1px solid ${C.border}` }} />
+            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#FEFEFE" }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>Neon</div>
+            <div style={{ fontSize: 11, color: C.textDim }}>#A1E503 · #000000 · #FEFEFE</div>
+          </div>
         </div>
-        <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: `1px solid ${C.border}`, maxWidth: 460 }}>
-          <div onClick={() => setThemeMode("day")} style={{ flex: 1, padding: "16px 0", textAlign: "center", cursor: "pointer", background: theme.mode === "day" ? C.accentDim : "transparent", color: theme.mode === "day" ? C.accent : C.textMuted, fontWeight: 600, fontSize: 14 }}>☀️ Day</div>
-          <div onClick={() => setThemeMode("night")} style={{ flex: 1, padding: "16px 0", textAlign: "center", cursor: "pointer", background: theme.mode === "night" ? C.accentDim : "transparent", color: theme.mode === "night" ? C.accent : C.textMuted, fontWeight: 600, fontSize: 14 }}>🌙 Night</div>
+      </Card>
+
+      <Card>
+        <SectionLabel>Contact &amp; Follow</SectionLabel>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Questions, access requests, or feedback — reach out or follow along.</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", maxWidth: 460 }}>
+          <a href="mailto:itsdrticks@gmail.com" style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, textDecoration: "none" }}>
+            <span style={{ fontSize: 18 }}>✉</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Email Us</div>
+              <div style={{ fontSize: 11, color: C.textDim }}>itsdrticks@gmail.com</div>
+            </div>
+          </a>
+          <a href="https://www.instagram.com/dr.ticks/" target="_blank" rel="noopener noreferrer" style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.accentDim, border: `1px solid ${C.accent}55`, borderRadius: 10, color: C.accent, textDecoration: "none" }}>
+            <span style={{ fontSize: 18 }}>📷</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Follow on Instagram</div>
+              <div style={{ fontSize: 11, color: C.accent }}>@dr.ticks</div>
+            </div>
+          </a>
         </div>
       </Card>
 
       <Card>
         <SectionLabel>Background Watermark</SectionLabel>
-        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>Pick the ♤ spade mark or your logo as the default watermark, or upload a custom image instead.</div>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>Pick the ✓ tick mark or your logo as the default watermark, or upload a custom image instead.</div>
         <div style={{ display: "flex", gap: 10, marginBottom: 12, maxWidth: 460, flexWrap: "wrap" }}>
-          {[{ key: "spade", label: "♤ Spade" }, { key: "logo", label: "🖼 Logo" }].map(opt => {
+          {[{ key: "spade", label: "✓ Tick" }, { key: "logo", label: "🖼 Logo" }].map(opt => {
             const activeMode = state.watermark?.mode || (state.watermark?.dataUrl ? "custom" : "spade");
             const active = activeMode === opt.key;
             return (
@@ -8492,7 +8487,7 @@ function Settings({ state, dispatch }) {
             <div style={{ marginTop: 14, width: 140, height: 90, borderRadius: 8, border: `1px solid ${C.border}`, backgroundImage: `url(${previewSrc})`, backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundColor: C.bg }} />
           ) : (
             <div style={{ marginTop: 14, width: 140, height: 90, borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: 40, color: C.accent, lineHeight: 1 }}>♤</span>
+              <span style={{ fontSize: 40, color: C.accent, lineHeight: 1 }}>✓</span>
             </div>
           );
         })()}
@@ -8597,7 +8592,7 @@ function Settings({ state, dispatch }) {
             <Btn small onClick={() => { if (newSession.trim()) { dispatch({ type: "ADD_SESSION", name: newSession.trim() }); setNewSession(""); } }}>Add Session</Btn>
           </div>
         ) : (
-          <InlineUpgradeLock dispatch={dispatch} text="Adding or removing custom sessions is an AcePlus feature. Ace Basic can still log trades using the default sessions above." />
+          <InlineUpgradeLock dispatch={dispatch} text="Adding or removing custom sessions is a Journal Plus feature. Journal Basic can still log trades using the default sessions above." />
         )}
       </Card>
 
@@ -8621,7 +8616,7 @@ function Settings({ state, dispatch }) {
             <Btn small onClick={() => { if (newEmotion.trim()) { dispatch({ type: "ADD_EMOTION", name: newEmotion.trim() }); setNewEmotion(""); } }}>Add Emotion</Btn>
           </div>
         ) : (
-          <InlineUpgradeLock dispatch={dispatch} text="Adding or removing custom emotions is an AcePlus feature. Ace Basic can still log trades using the default emotions above." />
+          <InlineUpgradeLock dispatch={dispatch} text="Adding or removing custom emotions is a Journal Plus feature. Journal Basic can still log trades using the default emotions above." />
         )}
       </Card>
 
@@ -8641,7 +8636,7 @@ function Settings({ state, dispatch }) {
             <div style={{ fontSize: 12, color: C.textDim, marginTop: 10 }}>JSON backup includes all trades, accounts, settings, and notes. CSV is trades-only for spreadsheets.</div>
           </>
         ) : (
-          <InlineUpgradeLock dispatch={dispatch} text="Exporting your data (JSON backup, CSV, HTML report) is an AcePlus feature." />
+          <InlineUpgradeLock dispatch={dispatch} text="Exporting your data (JSON backup, CSV, HTML report) is a Journal Plus feature." />
         )}
       </Card>
 
@@ -8660,7 +8655,7 @@ function Settings({ state, dispatch }) {
             <div style={{ fontSize: 12, color: C.textDim }}>Auto-detects JSON (full restore) or CSV (add trades). CSV columns: date, symbol, direction, outcome, entry, exit, size, pnl, pips, setup, session, mood, notes.</div>
           </>
         ) : (
-          <InlineUpgradeLock dispatch={dispatch} text="Bulk importing trades (JSON or CSV) is an AcePlus feature." />
+          <InlineUpgradeLock dispatch={dispatch} text="Bulk importing trades (JSON or CSV) is a Journal Plus feature." />
         )}
       </Card>
 
@@ -9042,19 +9037,19 @@ export default function App() {
     dashboard: <Dashboard state={state} dispatch={dispatch} setPage={setPage} />,
     journal: <Journal state={state} dispatch={dispatch} setPage={setPage} />,
     preparation: <PreparationPage state={state} dispatch={dispatch} />,
-    import: isPlus(state) ? <ImportTrades state={state} dispatch={dispatch} setPage={setPage} /> : <UpgradeGate title="Bulk import is an AcePlus feature" desc="Import trades from any broker/CSV in bulk once you upgrade to AcePlus." dispatch={dispatch} />,
-    mynotes: gatedPage("mynotes", <MyNotes state={state} dispatch={dispatch} />, "My Notes is an AcePlus feature", "Unlock daily journaling — Graces & Goals, Quick Notes, Advanced Self Review, Mentor Notes, and Past Entries."),
+    import: isPlus(state) ? <ImportTrades state={state} dispatch={dispatch} setPage={setPage} /> : <UpgradeGate title="Bulk import is a Journal Plus feature" desc="Import trades from any broker/CSV in bulk once you upgrade to Journal Plus." dispatch={dispatch} />,
+    mynotes: gatedPage("mynotes", <MyNotes state={state} dispatch={dispatch} />, "My Notes is a Journal Plus feature", "Unlock daily journaling — Graces & Goals, Quick Notes, Advanced Self Review, Mentor Notes, and Past Entries."),
     strategies: <Strategies state={state} dispatch={dispatch} />,
-    analytics: gatedPage("analytics", <Analytics state={state} />, "Analytics is an AcePlus feature", "Unlock full performance breakdowns by setup, session, timeframe, symbol, and more."),
-    myrecord: gatedPage("myrecord", <MyRecord state={state} />, "My Record is an AcePlus feature", "Track your lifetime green-day vs. red-day record, win/loss trade counts, and pips gained/lost — lifetime, this year, and this month."),
-    emotions: gatedPage("emotions", <EmotionsScore state={state} dispatch={dispatch} setPage={setPage} />, "Edge Score is an AcePlus feature", "Track your Behavioral Edge Score, emotional patterns, and coaching insights."),
-    finances: gatedPage("finances", <Finances state={state} dispatch={dispatch} />, "Prop Firm Tracker is an AcePlus feature", "Track evaluation costs, payouts, ROI, and breached accounts across every prop firm."),
-    livecapital: gatedPage("livecapital", <LiveCapital state={state} dispatch={dispatch} setPage={setPage} />, "Live Capital is an AcePlus feature", "Track live account drawdown, risk buffer, growth pacing, and capital rules."),
+    analytics: gatedPage("analytics", <Analytics state={state} />, "Analytics is a Journal Plus feature", "Unlock full performance breakdowns by setup, session, timeframe, symbol, and more."),
+    myrecord: gatedPage("myrecord", <MyRecord state={state} />, "My Record is a Journal Plus feature", "Track your lifetime green-day vs. red-day record, win/loss trade counts, and pips gained/lost — lifetime, this year, and this month."),
+    emotions: gatedPage("emotions", <EmotionsScore state={state} dispatch={dispatch} setPage={setPage} />, "Edge Score is a Journal Plus feature", "Track your Behavioral Edge Score, emotional patterns, and coaching insights."),
+    finances: gatedPage("finances", <Finances state={state} dispatch={dispatch} />, "Prop Firm Tracker is a Journal Plus feature", "Track evaluation costs, payouts, ROI, and breached accounts across every prop firm."),
+    livecapital: gatedPage("livecapital", <LiveCapital state={state} dispatch={dispatch} setPage={setPage} />, "Live Capital is a Journal Plus feature", "Track live account drawdown, risk buffer, growth pacing, and capital rules."),
     settings: <Settings state={state} dispatch={dispatch} />,
   };
 
   const watermark = state.watermark;
-  const currentNav = NAV.find(n => n.id === page) || (page === "import" ? { icon: "♤", label: "Import Trades" } : page === "settings" ? { icon: "♤", label: "Settings" } : null);
+  const currentNav = NAV.find(n => n.id === page) || (page === "import" ? { icon: "✓", label: "Import Trades" } : page === "settings" ? { icon: "✓", label: "Settings" } : null);
   const watermarkMode = watermark?.mode || (watermark?.dataUrl ? "custom" : "spade");
   const watermarkImgSrc = watermarkMode === "logo" ? logoUrl : watermarkMode === "custom" ? watermark?.dataUrl : null;
 
@@ -9066,7 +9061,7 @@ export default function App() {
         <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: `url(${watermarkImgSrc})`, backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat", opacity: (watermark.opacity ?? 20) / 100, pointerEvents: "none" }} />
       ) : (
         <div style={{ position: "fixed", inset: 0, zIndex: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: (watermark?.opacity ?? 20) / 100, pointerEvents: "none" }}>
-          <span style={{ fontSize: "min(60vw, 60vh)", lineHeight: 1, color: C.accent }}>♤</span>
+          <span style={{ fontSize: "min(60vw, 60vh)", lineHeight: 1, color: C.accent }}>✓</span>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", height: "100vh", position: "relative", zIndex: 1 }}>
