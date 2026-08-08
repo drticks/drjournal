@@ -222,6 +222,43 @@ const PlusBadge = ({ small }) => (
   <span style={{ background: `linear-gradient(90deg, ${C.blue}, ${C.purple})`, color: "#fff", fontSize: small ? 8 : 9, fontWeight: 800, letterSpacing: 0.5, padding: small ? "1px 6px" : "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>✨ PLUS</span>
 );
 
+// ── BRAND CONTACT/SOCIAL ICONS (inline SVG, not emoji) ────────────────────
+const MailIcon = ({ size = 14, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2.5" />
+    <path d="m2.5 5.5 9 6.5 9-6.5" />
+  </svg>
+);
+const InstagramIcon = ({ size = 14, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
+    <circle cx="12" cy="12" r="4.3" />
+    <circle cx="17.4" cy="6.6" r="1.1" fill={color} stroke="none" />
+  </svg>
+);
+// Shared pill CTA for the "Contact Us" / "Follow on Instagram" links used in
+// the header, auth screen, and Settings — real <a> tags styled as buttons.
+const ContactCTA = ({ kind, style = {} }) => {
+  const isMail = kind === "mail";
+  const props = isMail
+    ? { href: `mailto:${"itsdrticks@gmail.com"}`, label: "Contact Us" }
+    : { href: "https://www.instagram.com/dr.ticks/", target: "_blank", rel: "noopener noreferrer", label: "Follow on Instagram" };
+  return (
+    <a {...props} style={{
+      display: "inline-flex", alignItems: "center", gap: 7,
+      background: isMail ? C.surfaceHigh : C.accent,
+      color: isMail ? C.text : "#000",
+      border: isMail ? `1px solid ${C.border}` : "none",
+      borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700,
+      textDecoration: "none", whiteSpace: "nowrap", cursor: "pointer",
+      ...style,
+    }}>
+      {isMail ? <MailIcon /> : <InstagramIcon />}
+      {props.label}
+    </a>
+  );
+};
+
 // ── PROMO ANNOUNCEMENT BANNER ─────────────────────────────────────────────
 // Sits pinned at the very top of the app (above the header/sidebar) for as
 // long as PROMO_ALL_FEATURES_FREE is true, so nobody misses that today's free
@@ -232,8 +269,8 @@ function PlanAnnouncementBanner() {
   return (
     <div style={{
       flexShrink: 0, width: "100%", position: "relative", zIndex: 600,
-      background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`,
-      color: "#fff", padding: "10px 16px",
+      background: C.accent,
+      color: "#000", padding: "10px 16px",
       display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
       flexWrap: "wrap", textAlign: "center", boxShadow: "0 2px 14px #0007",
     }}>
@@ -563,7 +600,7 @@ function defaultState() {
       { id: "s4", name: "Fade", color: C.red, description: "Buy or sell at pullback level", rules: ["Identify overextension", "Wait for reversal signal", "Enter against the move"] },
       { id: "s5", name: "Inverted Celery", color: "#9b6bff", description: "Buy or sell at pullback level", rules: ["Confirm bias on higher TF", "Wait for confirmation candle", "Enter on retest"] },
     ],
-    sessions: ["Asian Session", "Pre-London", "London Session", "Pre-NY", "NY Open", "London/NY Overlap", "NYSE Open", "NY Close", "Sydney/Asian Pre"],
+    sessions: ["Asian", "London", "New York"],
     emotions: ["Focus", "Fear", "Greed", "Anger"],
     referenceListsSchemaVersion: REFERENCE_LISTS_SCHEMA_VERSION,
     accountsSchemaVersion: ACCOUNTS_SCHEMA_VERSION,
@@ -596,9 +633,9 @@ function defaultState() {
     plan: "free", // "free" (Journal Basic) | "plus" (Journal Plus $10/mo)
     theme: { name: "Neon", mode: "night" },
     themeSchemaVersion: THEME_SCHEMA_VERSION,
-    uiTransparency: 20,
-    popupTransparency: 0,
-    watermark: { mode: "spade", dataUrl: null, opacity: 20 }, // mode: "spade" | "logo" | "custom"
+    uiTransparency: 40,
+    popupTransparency: 10,
+    watermark: { mode: "logo", dataUrl: null, opacity: 20 }, // mode: "spade" | "logo" | "custom"
     privacy: { enabled: false, blurOnBlur: true, disableRightClick: true, disableCopy: true, watermarkOverlay: true, blockPrint: true },
     liveCapital: {
       startingCapital: 25000,
@@ -654,7 +691,7 @@ function blankState() {
 // (who have a saved theme/transparency in localStorage) get migrated onto
 // the new look automatically instead of staying stuck on an older default.
 // Their trades, accounts, notes, etc. are untouched — only appearance resets.
-const THEME_SCHEMA_VERSION = 3;
+const THEME_SCHEMA_VERSION = 4;
 
 // Bump this whenever the *default* sessions/emotions lists (or the seeded
 // demo trades) change, so returning users on an older reference-list
@@ -664,7 +701,7 @@ const THEME_SCHEMA_VERSION = 3;
 // real trades get a timestamp id like "t1751462400123") gets refreshed.
 // v4: expanded the default sessions list from 3 (Asian/London/New York) to
 // the full 9-band breakdown already used by the header's live session clock.
-const REFERENCE_LISTS_SCHEMA_VERSION = 4;
+const REFERENCE_LISTS_SCHEMA_VERSION = 5;
 
 // Bump this whenever the *default* accounts list changes, so returning users
 // still sitting on the old two-account "Pipstone 100K Funded / Pipstone BOGO"
@@ -788,7 +825,7 @@ const Btn = ({ children, onClick, variant = "primary", small, style = {}, disabl
     // for this variant live entirely in .btn-teal-outline (see buildGlobalCSS).
     return <button onClick={disabled ? null : onClick} disabled={disabled} className="btn-teal-outline" style={{ display: base.display, alignItems: base.alignItems, gap: base.gap, padding: base.padding, borderRadius: base.borderRadius, fontSize: base.fontSize, fontWeight: base.fontWeight, cursor: base.cursor, opacity: base.opacity, transition: base.transition, fontFamily: "inherit", ...style }}>{children}</button>;
   }
-  const variants = { primary: { background: C.accent, color: "#000" }, gradient: { background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`, color: "#fff" }, gradient2: { background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`, color: "#fff" }, ghost: { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` }, danger: { background: C.redDim, color: C.red, border: `1px solid ${C.red}40` }, success: { background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40` }, warn: { background: C.yellowDim, color: C.yellow, border: `1px solid ${C.yellow}40` }, accent2: { background: C.accent2, color: "#000" } };
+  const variants = { primary: { background: C.accent, color: "#000" }, gradient: { background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`, color: "#fff" }, gradient2: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000" }, ghost: { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` }, danger: { background: C.redDim, color: C.red, border: `1px solid ${C.red}40` }, success: { background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40` }, warn: { background: C.yellowDim, color: C.yellow, border: `1px solid ${C.yellow}40` }, accent2: { background: C.accent2, color: "#000" } };
   return <button onClick={disabled ? null : onClick} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
 };
 
@@ -1139,7 +1176,7 @@ function AuthScreen({ state, dispatch }) {
         </Card>
         <div style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: C.textDim }}>Contact To Sign Up: itsdrticks@gmail.com </div>
         <div style={{ textAlign: "center", marginTop: 8 }}>
-          <a href="https://www.instagram.com/dr.ticks/" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: C.accent, fontWeight: 700, textDecoration: "none" }}>📷 Follow @dr.ticks on Instagram</a>
+          <ContactCTA kind="instagram" style={{ fontSize: 12, padding: "7px 14px" }} />
         </div>
       </div>
       {showSignupNotice && (
@@ -1590,9 +1627,9 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
 
       <button title="Settings" onClick={() => setPage("settings")} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.textMuted, width: 34, height: 34, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>⚙️</button>
 
-      <a href="mailto:itsdrticks@gmail.com" style={{ display: "flex", alignItems: "center", gap: 6, color: C.textMuted, fontSize: 13, fontWeight: 600, textDecoration: "none", padding: "8px 6px", whiteSpace: "nowrap" }}>✉ Contact Us</a>
+      <ContactCTA kind="mail" style={{ background: "transparent", border: "none", color: C.textMuted, padding: "8px 6px", fontWeight: 600 }} />
 
-      <a href="https://www.instagram.com/dr.ticks/" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: C.accent, fontSize: 13, fontWeight: 700, textDecoration: "none", padding: "8px 6px", whiteSpace: "nowrap" }}>📷 Follow @dr.ticks</a>
+      <ContactCTA kind="instagram" style={{ background: "transparent", border: "none", color: C.accent, padding: "8px 6px" }} />
 
       {/* Session control */}
       <div style={{ position: "relative" }}>
@@ -1655,7 +1692,7 @@ function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
       </div>
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 8px" }}>
         <Btn variant="tealOutline" onClick={() => openAddTrade(state, dispatch)} style={{ width: "100%", justifyContent: "center", fontSize: 13, marginBottom: 8 }}>+ Add Trade</Btn>
-        <button onClick={() => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); onClose && onClose(); return; } setPage("import"); onClose && onClose(); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`, border: "none", borderRadius: 7, color: "#fff", fontSize: 12, fontWeight: 700, padding: 8, cursor: "pointer", marginBottom: 8, opacity: page === "import" ? 1 : 0.9, boxShadow: page === "import" ? `0 0 0 2px ${C.accent}55` : "none" }}>Import Trades {!isPlus(state) && <PlusBadge small />}</button>
+        <button onClick={() => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); onClose && onClose(); return; } setPage("import"); onClose && onClose(); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, border: "none", borderRadius: 7, color: "#000", fontSize: 12, fontWeight: 700, padding: 8, cursor: "pointer", marginBottom: 8, opacity: page === "import" ? 1 : 0.9, boxShadow: page === "import" ? `0 0 0 2px ${C.accent}55` : "none" }}>Import Trades {!isPlus(state) && <PlusBadge small />}</button>
         <button onClick={async () => { await supabase.auth.signOut(); dispatch({ type: "LOGOUT" }); }} style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 7, color: C.textMuted, fontSize: 12, padding: 7, cursor: "pointer" }}>Sign Out</button>
       </div>
     </div>
@@ -8438,20 +8475,8 @@ function Settings({ state, dispatch }) {
         <SectionLabel>Contact &amp; Follow</SectionLabel>
         <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Questions, access requests, or feedback — reach out or follow along.</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", maxWidth: 460 }}>
-          <a href="mailto:itsdrticks@gmail.com" style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, textDecoration: "none" }}>
-            <span style={{ fontSize: 18 }}>✉</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Email Us</div>
-              <div style={{ fontSize: 11, color: C.textDim }}>itsdrticks@gmail.com</div>
-            </div>
-          </a>
-          <a href="https://www.instagram.com/dr.ticks/" target="_blank" rel="noopener noreferrer" style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.accentDim, border: `1px solid ${C.accent}55`, borderRadius: 10, color: C.accent, textDecoration: "none" }}>
-            <span style={{ fontSize: 18 }}>📷</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Follow on Instagram</div>
-              <div style={{ fontSize: 11, color: C.accent }}>@dr.ticks</div>
-            </div>
-          </a>
+          <ContactCTA kind="mail" style={{ flex: "1 1 200px", justifyContent: "center" }} />
+          <ContactCTA kind="instagram" style={{ flex: "1 1 200px", justifyContent: "center" }} />
         </div>
       </Card>
 
