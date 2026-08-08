@@ -274,7 +274,7 @@ function PlanAnnouncementBanner() {
       display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
       flexWrap: "wrap", textAlign: "center", boxShadow: "0 2px 14px #0007",
     }}>
-      <span style={{ fontSize: 15, flexShrink: 0 }}>✨</span>
+      {/* <span style={{ fontSize: 15, flexShrink: 0 }}>✨</span> */}
       <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.2 }}>
         JOURNAL · LEARN · DISCIPLINE · GROW: 
       </span>
