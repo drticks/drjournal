@@ -276,11 +276,11 @@ function PlanAnnouncementBanner() {
     }}>
       <span style={{ fontSize: 15, flexShrink: 0 }}>✨</span>
       <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.2 }}>
-        Allah says: 
+        JOURNAL · LEARN · DISCIPLINE · GROW: 
       </span>
-      <span style={{ fontSize: 12.5, fontWeight: 500, opacity: 0.95 }}>
+      {/* <span style={{ fontSize: 12.5, fontWeight: 500, opacity: 0.95 }}>
         "I am as My servant thinks of Me." (Hadith Qudsi).
-      </span>
+      </span> */}
     </div>
   );
 }
@@ -825,7 +825,7 @@ const Btn = ({ children, onClick, variant = "primary", small, style = {}, disabl
     // for this variant live entirely in .btn-teal-outline (see buildGlobalCSS).
     return <button onClick={disabled ? null : onClick} disabled={disabled} className="btn-teal-outline" style={{ display: base.display, alignItems: base.alignItems, gap: base.gap, padding: base.padding, borderRadius: base.borderRadius, fontSize: base.fontSize, fontWeight: base.fontWeight, cursor: base.cursor, opacity: base.opacity, transition: base.transition, fontFamily: "inherit", ...style }}>{children}</button>;
   }
-  const variants = { primary: { background: C.accent, color: "#000" }, gradient: { background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`, color: "#fff" }, gradient2: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000" }, ghost: { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` }, danger: { background: C.redDim, color: C.red, border: `1px solid ${C.red}40` }, success: { background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40` }, warn: { background: C.yellowDim, color: C.yellow, border: `1px solid ${C.yellow}40` }, accent2: { background: C.accent2, color: "#000" } };
+  const variants = { primary: { background: C.accent, color: "#000" }, gradient: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000" }, gradient2: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000" }, ghost: { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` }, danger: { background: C.redDim, color: C.red, border: `1px solid ${C.red}40` }, success: { background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40` }, warn: { background: C.yellowDim, color: C.yellow, border: `1px solid ${C.yellow}40` }, accent2: { background: C.accent2, color: "#000" } };
   return <button onClick={disabled ? null : onClick} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
 };
 
@@ -3081,7 +3081,7 @@ function ImageLightbox({ images, index, onClose, onNavigate, labels, title = "Tr
             Scroll to zoom in/out · Drag to pan · Double-click to reset
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <button onClick={handleCopy} style={{ ...headerBtn, background: `linear-gradient(90deg, ${C.blue}, ${C.purple})`, color: "#fff" }}>
+            <button onClick={handleCopy} style={{ ...headerBtn, background: `linear-gradient(90deg, ${C.accent}, ${C.accent2})`, color: "#000" }}>
               {copied ? "✓ Copied" : <>⧉ Copy</>}
             </button>
             <button onClick={handleNewTab} style={{ ...headerBtn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}55` }}>
@@ -3501,7 +3501,7 @@ function DashboardCalendarSection({ state, dispatch, onSelectTrade, setPage }) {
             <div style={{ padding: "12px 18px 20px", borderTop: `1px solid ${C.border}`, flexShrink: 0, position: "sticky", bottom: 0, background: C.modalBg }}>
               <button
                 onClick={() => { setPopup(null); setPage && setPage("journal"); }}
-                style={{ width: "100%", background: `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})`, border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 14, padding: "13px 0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", letterSpacing: 0.3 }}>
+                style={{ width: "100%", background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, border: "none", borderRadius: 10, color: "#000", fontWeight: 700, fontSize: 14, padding: "13px 0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", letterSpacing: 0.3 }}>
                 <span style={{ fontSize: 15 }}>✓</span> View on Trades page
               </button>
             </div>
@@ -4502,7 +4502,7 @@ function MyNotes({ state, dispatch }) {
       <div style={{ display: "flex", gap: 8, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 6, maxWidth: 640, margin: "0 auto", width: "100%" }}>
         {[["graces", "🚩 Graces and Goals"], ["daily", "📄 Daily Notes"], ["past", "📅 Past Entries"]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "10px 12px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
-            background: tab === id ? `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})` : "transparent", color: tab === id ? "#001018" : C.textMuted }}>{label}</button>
+            background: tab === id ? `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)` : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
         ))}
       </div>
 
@@ -7546,7 +7546,7 @@ function Finances({ state, dispatch }) {
       <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: "9px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
-            background: tab === id ? `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})` : "transparent", color: tab === id ? "#001018" : C.textMuted }}>{label}</button>
+            background: tab === id ? `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)` : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
         ))}
       </div>
       {tab === "pnl" && <PnLTab state={state} dispatch={dispatch} />}
@@ -8131,7 +8131,7 @@ function LiveCapital({ state, dispatch, setPage }) {
 
       <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
         {TABS.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ padding: "9px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: tab === id ? `linear-gradient(90deg, ${C.blue}, ${C.purple}, ${C.accent2})` : "transparent", color: tab === id ? "#001018" : C.textMuted }}>{label}</button>
+          <button key={id} onClick={() => setTab(id)} style={{ padding: "9px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: tab === id ? `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)` : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
         ))}
       </div>
 
