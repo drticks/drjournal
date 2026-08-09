@@ -2764,6 +2764,12 @@ function drawStatIcon(ctx, cx, cy, r, type, color) {
   } else if (type === "outcome-loss") {
     ctx.beginPath(); ctx.moveTo(cx - r * 0.32, cy - r * 0.32); ctx.lineTo(cx + r * 0.32, cy + r * 0.32); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx + r * 0.32, cy - r * 0.32); ctx.lineTo(cx - r * 0.32, cy + r * 0.32); ctx.stroke();
+  } else if (type === "symbol") {
+    [-0.34, 0.02, 0.34].forEach((off, i) => {
+      const bx = cx + off * r * 1.7, h = [0.75, 1.05, 0.55][i] * r * 0.55;
+      ctx.beginPath(); ctx.moveTo(bx, cy - r * 0.6); ctx.lineTo(bx, cy + r * 0.6); ctx.stroke();
+      ctx.fillRect(bx - r * 0.12, cy - h / 2, r * 0.24, h);
+    });
   } else { // outcome-be
     ctx.beginPath(); ctx.moveTo(cx - r * 0.38, cy); ctx.lineTo(cx + r * 0.38, cy); ctx.stroke();
   }
@@ -2781,14 +2787,21 @@ function drawTargetIcon(ctx, cx, cy, r, color) {
 // drives both the export canvas's height and the live preview, so they
 // always agree.
 function shareCardLayout(aspect) {
-  const W = SHARE_CARD_W, pad = 56;
-  const headerY = 48, headerH = 72;
-  const statsY = headerY + headerH + 40, statsH = 360;
-  const chartY = statsY + statsH + 40, chartH = SHARE_CHART_H[aspect] || SHARE_CHART_H.wide;
-  const quoteY = chartY + chartH + 36, quoteH = 176;
-  const taglineY = quoteY + quoteH + 46;
-  const H = taglineY + 34;
-  return { W, H, pad, headerY, headerH, statsY, statsH, chartY, chartH, quoteY, quoteH, taglineY };
+  const W = SHARE_CARD_W, outerPad = 18, pad = 56;
+  const headerY = pad + 6, headerH = 86;
+  const statsY = headerY + headerH + 30, statsH = 300;
+  const chartLabelH = 36;
+  const chartY = statsY + statsH + 34 + chartLabelH, chartH = SHARE_CHART_H[aspect] || SHARE_CHART_H.wide;
+  const quoteY = chartY + chartH + 32, quoteH = 190;
+  const taglineY = quoteY + quoteH + 48;
+  const H = taglineY + 26;
+  return { W, H, pad, outerPad, headerY, headerH, statsY, statsH, chartLabelH, chartY, chartH, quoteY, quoteH, taglineY };
+}
+// Derives 2–3 letter initials from SHARE_BRAND for the decorative watermark
+// mark (e.g. "DR. JOURNAL" → "DJ") — used in the header and footer.
+function shareBrandInitials() {
+  const letters = SHARE_BRAND.split(/\s+/).map(w => w.replace(/[^A-Za-z]/g, "")).filter(Boolean).map(w => w[0]);
+  return (letters.join("") || "DJ").slice(0, 3).toUpperCase();
 }
 
 // Draws the pan/zoomed crop of `img` into rect (x,y,w,h). zoom 1 = plain
@@ -2809,107 +2822,177 @@ function drawShareChartCrop(ctx, img, x, y, w, h, zoom, offsetXFrac, offsetYFrac
 // Core draw routine, shared by the live chart-crop preview (small canvas,
 // chart region only) and the full card export (whole layout) — see below.
 function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
-  const { W, H, pad, headerY, headerH, statsY, statsH, chartY, chartH, quoteY, quoteH, taglineY } = layout;
-  const pnlColor = trade.outcome === "BE" ? "#FFD400" : trade.pnl >= 0 ? "#A1E503" : "#FF2965";
+  const { W, H, pad, outerPad, headerY, headerH, statsY, statsH, chartLabelH, chartY, chartH, quoteY, quoteH, taglineY } = layout;
+  const fees = parseFloat(trade.fees) || 0;
+  const netPnl = trade.pnl - fees;
+  const pnlColor = trade.outcome === "BE" ? "#FFD400" : netPnl >= 0 ? "#A1E503" : "#FF2965";
   const isLong = /long|buy/i.test(trade.direction || "");
   const dirColor = isLong ? "#A1E503" : "#00E5FF";
   const outcomeIcon = trade.outcome === "Win" ? "outcome-win" : trade.outcome === "Loss" ? "outcome-loss" : "outcome-be";
+  const initials = shareBrandInitials();
   const bg = "#050505";
 
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-  const glow = ctx.createRadialGradient(60, 20, 0, 60, 20, 420);
+  const glow = ctx.createRadialGradient(60, 20, 0, 60, 20, 460);
   glow.addColorStop(0, pnlColor + "1c"); glow.addColorStop(1, "transparent");
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 
+  // ── Outer framed-card border ───────────────────────────────────────────
+  ctx.save();
+  ctx.shadowColor = "#A1E50355"; ctx.shadowBlur = 26;
+  ctx.strokeStyle = "#A1E50399"; ctx.lineWidth = 2;
+  roundRectPath(ctx, outerPad, outerPad, W - outerPad * 2, H - outerPad * 2, 28); ctx.stroke();
+  ctx.restore();
+
   // ── Header ──────────────────────────────────────────────────────────────
+  // faint giant initials watermark, upper-right, behind the "Trade Result" pill
+  ctx.save();
+  ctx.textAlign = "right"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#ffffff08"; ctx.font = "800 128px Inter, sans-serif";
+  ctx.fillText(initials, W - pad, headerY + 92);
+  ctx.restore();
+
   if (logoImg) {
+    ctx.strokeStyle = "#A1E503aa"; ctx.lineWidth = 2; roundRectPath(ctx, pad - 2, headerY - 2, 68, 68, 17); ctx.stroke();
     ctx.save(); roundRectPath(ctx, pad, headerY, 64, 64, 16); ctx.clip();
     drawShareChartCrop(ctx, logoImg, pad, headerY, 64, 64, 1, 0, 0);
     ctx.restore();
   } else {
     ctx.fillStyle = "#A1E503"; roundRectPath(ctx, pad, headerY, 64, 64, 16); ctx.fill();
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000000"; ctx.font = "24px Inter, sans-serif";
-    ctx.fillText("✓", pad + 32, headerY + 32);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000000"; ctx.font = "800 24px Inter, sans-serif";
+    ctx.fillText(initials.slice(0, 2), pad + 32, headerY + 33);
   }
+
   ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#f2f4f9"; ctx.font = "800 25px Inter, sans-serif";
   ctx.fillText(SHARE_BRAND, pad + 80, headerY + 28);
+  const brandW = ctx.measureText(SHARE_BRAND).width;
+  // verified badge
+  const vbx = pad + 80 + brandW + 20, vby = headerY + 20;
+  ctx.fillStyle = "#A1E503"; ctx.beginPath(); ctx.arc(vbx, vby, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#000000"; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(vbx - 5, vby); ctx.lineTo(vbx - 1.5, vby + 4); ctx.lineTo(vbx + 5.5, vby - 5); ctx.stroke();
+
   ctx.fillStyle = "#8a93a8"; ctx.font = "500 17px Inter, sans-serif";
   ctx.fillText(fmtDate(trade.date), pad + 80, headerY + 54);
 
+  // "TRADE RESULT" status pill, top-right
+  ctx.font = "700 13px Inter, sans-serif";
+  const pillLabel = "T R A D E   R E S U L T";
+  const pillTextW = ctx.measureText(pillLabel).width;
+  const pillW = pillTextW + 46, pillH = 32, pillX = W - pad - pillW, pillY = headerY + 4;
+  ctx.strokeStyle = "#ffffff2a"; ctx.lineWidth = 1.2; roundRectPath(ctx, pillX, pillY, pillW, pillH, 16); ctx.stroke();
+  ctx.textAlign = "left"; ctx.fillStyle = "#c7cbd6";
+  ctx.fillText(pillLabel, pillX + 16, pillY + pillH / 2 + 4);
+  const dotCx = pillX + pillW - 18, dotCy = pillY + pillH / 2;
+  ctx.strokeStyle = pnlColor + "88"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(dotCx, dotCy, 7, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = pnlColor; ctx.beginPath(); ctx.arc(dotCx, dotCy, 3.4, 0, Math.PI * 2); ctx.fill();
+
   // ── Stats block ─────────────────────────────────────────────────────────
-  // corner brackets
-  ctx.strokeStyle = "#A1E50380"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(pad - 8, statsY + 16); ctx.lineTo(pad - 8, statsY - 8); ctx.lineTo(pad + 16, statsY - 8); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(W - pad - 16, statsY - 8); ctx.lineTo(W - pad + 8, statsY - 8); ctx.lineTo(W - pad + 8, statsY + 16); ctx.stroke();
+  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5;
+  roundRectPath(ctx, pad, statsY, W - pad * 2, statsH, 20); ctx.stroke();
 
-  const leftW = (W - pad * 2) * 0.56, dividerX = pad + leftW + 24, rightX = dividerX + 40;
+  const innerPad = 32;
+  const leftW = (W - pad * 2) * 0.5, dividerX = pad + leftW, rightX = dividerX + 44;
 
-  ctx.textAlign = "left"; ctx.fillStyle = pnlColor; ctx.font = "700 15px Inter, sans-serif";
-  ctx.fillText("T R A D E   R E S U L T", pad, statsY + 30);
-  ctx.fillStyle = pnlColor; ctx.font = "800 78px Inter, sans-serif";
-  ctx.fillText(fmt$(trade.pnl), pad, statsY + 130);
+  // P&L (net of fees)
+  ctx.textAlign = "left"; ctx.fillStyle = "#8a93a8"; ctx.font = "700 15px Inter, sans-serif";
+  ctx.fillText("P & L", pad + innerPad, statsY + 52);
+  ctx.fillStyle = pnlColor; ctx.font = "800 72px Inter, sans-serif";
+  ctx.fillText(fmt$(netPnl), pad + innerPad, statsY + 138);
 
-  const tickerY = statsY + 168, tickerH = 60, tickerW = leftW;
-  ctx.strokeStyle = "#ffffff22"; ctx.lineWidth = 1.5; roundRectPath(ctx, pad, tickerY, tickerW, tickerH, 12); ctx.stroke();
+  // Outcome pill (replaces the old ticker box)
+  const outW = leftW - innerPad * 2, outH = 78, outY = statsY + 172, outX = pad + innerPad;
+  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5; roundRectPath(ctx, outX, outY, outW, outH, 14); ctx.stroke();
   ctx.fillStyle = "#6b7488"; ctx.font = "700 13px Inter, sans-serif";
-  ctx.fillText("T I C K E R", pad + 20, tickerY + tickerH / 2 - 4);
-  ctx.fillStyle = "#eef0f5"; ctx.font = "800 22px Inter, sans-serif";
-  ctx.fillText((trade.symbol || "—").toUpperCase(), pad + 20, tickerY + tickerH / 2 + 18);
-
-  ctx.strokeStyle = "#ffffff1c"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(dividerX, statsY + 6); ctx.lineTo(dividerX, statsY + statsH - 6); ctx.stroke();
-
+  ctx.fillText("O U T C O M E", outX + 20, outY + 28);
+  ctx.fillStyle = "#eef0f5"; ctx.font = "800 24px Inter, sans-serif";
   const pipsKnown = trade.pips !== undefined && trade.pips !== null && trade.pips !== "";
+  const outcomeVal = (trade.outcome || "—").toUpperCase() + (pipsKnown ? `  (${trade.pips > 0 ? "+" : ""}${trade.pips}p)` : "");
+  ctx.fillText(outcomeVal, outX + 20, outY + 58);
+  // outcome check/x/be box, right end of the pill
+  const obSize = 46, obX = outX + outW - obSize - 14, obY = outY + (outH - obSize) / 2;
+  ctx.fillStyle = pnlColor + "1a"; roundRectPath(ctx, obX, obY, obSize, obSize, 12); ctx.fill();
+  ctx.strokeStyle = pnlColor + "70"; ctx.lineWidth = 1.5; roundRectPath(ctx, obX, obY, obSize, obSize, 12); ctx.stroke();
+  drawStatIcon(ctx, obX + obSize / 2, obY + obSize / 2, 20, outcomeIcon, pnlColor);
+
+  // divider
+  ctx.strokeStyle = "#ffffff1c"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(dividerX, statsY + 20); ctx.lineTo(dividerX, statsY + statsH - 20); ctx.stroke();
+
+  // Right column — Direction / Session / Setup / Symbol
   const rows = [
-    ["direction-" + (isLong ? "long" : "short"), dirColor, "DIRECTION", (trade.direction || "—").toUpperCase()],
-    ["session", "#c9a9ff", "SESSION", (trade.session || "—").toUpperCase()],
-    ["setup", "#FFD400", "SETUP", trade.setup || "—"],
-    [outcomeIcon, pnlColor, "OUTCOME", (trade.outcome || "—").toUpperCase() + (pipsKnown ? `  (${trade.pips > 0 ? "+" : ""}${trade.pips}p)` : "")],
+    ["direction-" + (isLong ? "long" : "short"), dirColor, "DIRECTION", (trade.direction || "—").toUpperCase(), false],
+    ["session", "#c9a9ff", "SESSION", (trade.session || "—").toUpperCase(), false],
+    ["setup", "#FFD400", "SETUP", trade.setup || "—", false],
+    ["symbol", "#A1E503", "SYMBOL", (trade.symbol || "—").toUpperCase(), true],
   ];
   const rowH = statsH / 4;
-  rows.forEach(([icon, color, label, value], i) => {
+  const iconBoxSize = 44;
+  rows.forEach(([icon, color, label, value, boxed], i) => {
     const ry = statsY + rowH * i + rowH / 2;
-    ctx.fillStyle = color + "1a"; ctx.beginPath(); ctx.arc(rightX + 22, ry, 22, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(rightX + 22, ry, 22, 0, Math.PI * 2); ctx.stroke();
-    drawStatIcon(ctx, rightX + 22, ry, 22, icon, color);
+    if (boxed) {
+      ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5;
+      roundRectPath(ctx, rightX - 12, ry - rowH / 2 + 8, (W - pad) - (rightX - 12) - innerPad + 12, rowH - 16, 12); ctx.stroke();
+    }
+    ctx.fillStyle = color + "1a"; roundRectPath(ctx, rightX, ry - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.fill();
+    ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5; roundRectPath(ctx, rightX, ry - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.stroke();
+    drawStatIcon(ctx, rightX + iconBoxSize / 2, ry, 18, icon, color);
     ctx.textAlign = "left"; ctx.fillStyle = "#6b7488"; ctx.font = "700 13px Inter, sans-serif";
-    ctx.fillText(label, rightX + 58, ry - 8);
+    ctx.fillText(label, rightX + iconBoxSize + 18, ry - 8);
     ctx.fillStyle = "#eef0f5"; ctx.font = "800 20px Inter, sans-serif";
     let val = String(value);
-    while (ctx.measureText(val).width > W - pad - (rightX + 58) && val.length > 3) val = val.slice(0, -2) + "…";
-    ctx.fillText(val, rightX + 58, ry + 18);
+    const maxW = W - pad - innerPad - (rightX + iconBoxSize + 18);
+    while (ctx.measureText(val).width > maxW && val.length > 3) val = val.slice(0, -2) + "…";
+    ctx.fillText(val, rightX + iconBoxSize + 18, ry + 18);
   });
 
   // ── Chart ───────────────────────────────────────────────────────────────
+  ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 14px Inter, sans-serif";
+  const chartLabelY = chartY - chartLabelH + 24;
+  drawStatIcon(ctx, pad + 10, chartLabelY - 5, 11, "symbol", "#A1E503");
+  ctx.fillText("T R A D E   C H A R T", pad + 30, chartLabelY);
+
   roundRectPath(ctx, pad, chartY, W - pad * 2, chartH, 18);
   ctx.save(); ctx.clip();
   if (chartImg) drawShareChartCrop(ctx, chartImg, pad, chartY, W - pad * 2, chartH, frame.zoom, frame.offsetX, frame.offsetY);
   else { ctx.fillStyle = "#151b2c"; ctx.fillRect(pad, chartY, W - pad * 2, chartH); }
   ctx.restore();
-  ctx.strokeStyle = "#ffffff1c"; ctx.lineWidth = 1.5;
+  ctx.save();
+  ctx.shadowColor = "#A1E50340"; ctx.shadowBlur = 14;
+  ctx.strokeStyle = "#A1E50366"; ctx.lineWidth = 1.5;
   roundRectPath(ctx, pad, chartY, W - pad * 2, chartH, 18); ctx.stroke();
+  ctx.restore();
 
   // ── Daily mindset quote ─────────────────────────────────────────────────
   ctx.fillStyle = "#ffffff08"; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.fill();
   ctx.strokeStyle = "#ffffff14"; ctx.lineWidth = 1; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.stroke();
-  // giant faint decorative quote mark
-  ctx.textAlign = "right"; ctx.fillStyle = "#A1E50314"; ctx.font = "800 150px Georgia, serif";
-  ctx.fillText("”", W - pad - 20, quoteY + 130);
 
-  const iconCx = pad + 46, iconCy = quoteY + 46;
-  ctx.fillStyle = "#A1E5031a"; ctx.beginPath(); ctx.arc(iconCx, iconCy, 26, 0, Math.PI * 2); ctx.fill();
-  drawTargetIcon(ctx, iconCx, iconCy, 15, "#A1E503");
-  ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 14px Inter, sans-serif";
-  ctx.fillText("D A I L Y   M I N D S E T", pad + 88, quoteY + 40);
+  const quoteColW = 168;
+  ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 13px Inter, sans-serif";
+  ctx.fillText("D A I L Y", pad + 30, quoteY + 40);
+  ctx.fillText("M I N D S E T", pad + 30, quoteY + 58);
+  ctx.fillStyle = "#A1E50399"; ctx.font = "800 64px Georgia, serif";
+  ctx.fillText("“", pad + 24, quoteY + 132);
 
-  ctx.font = "italic 600 22px Inter, sans-serif"; ctx.fillStyle = "#d7dae4";
-  const quote = "“" + dailyQuote(new Date(trade.date || Date.now())) + "”";
-  const lines = wrapCanvasText(ctx, quote, W - pad * 2 - 88 - 40);
-  lines.slice(0, 3).forEach((ln, i) => ctx.fillText(ln, pad + 88, quoteY + 78 + i * 30));
+  // faint giant initials watermark, footer right side
+  ctx.save();
+  ctx.textAlign = "right"; ctx.fillStyle = "#A1E50314"; ctx.font = "800 110px Inter, sans-serif";
+  ctx.fillText(initials, W - pad - 6, quoteY + quoteH - 26);
+  ctx.restore();
 
-  // Bottom tagline
-  ctx.fillStyle = "#4b5266"; ctx.font = "600 14px Inter, sans-serif";
-  ctx.fillText("O N E   T R A D E   N E V E R   M A K E S   A   T R A D E R", W / 2, taglineY);
+  ctx.font = "500 24px Inter, sans-serif"; ctx.fillStyle = "#d7dae4";
+  const quote = dailyQuote(new Date(trade.date || Date.now()));
+  const lines = wrapCanvasText(ctx, quote, W - pad * 2 - quoteColW - 40);
+  const lineH = 32, startY = quoteY + quoteH / 2 - ((Math.min(lines.length, 3) - 1) * lineH) / 2 + 8;
+  lines.slice(0, 3).forEach((ln, i) => ctx.fillText(ln, pad + quoteColW, startY + i * lineH));
+
+  // Bottom tagline, dash rules either side
+  ctx.font = "600 14px Inter, sans-serif"; ctx.fillStyle = "#4b5266"; ctx.textAlign = "center";
+  const tagline = "J O U R N A L   ·   L E A R N   ·   D I S C I P L I N E   ·   G R O W";
+  ctx.fillText(tagline, W / 2, taglineY);
+  const tagW = ctx.measureText(tagline).width;
+  ctx.strokeStyle = "#4b526666"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - tagW / 2 - 60, taglineY - 5); ctx.lineTo(W / 2 - tagW / 2 - 16, taglineY - 5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W / 2 + tagW / 2 + 16, taglineY - 5); ctx.lineTo(W / 2 + tagW / 2 + 60, taglineY - 5); ctx.stroke();
 }
 
 async function renderShareCardPNG(trade, screenshotUrl, frame) {
