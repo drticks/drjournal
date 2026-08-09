@@ -977,6 +977,18 @@ const SectionLabel = ({ children }) => (
   </div>
 );
 
+// Shared page title band — title + subtitle on the left, action slot on the
+// right. Used at the top of every page for a consistent template.
+const PageHeader = ({ title, subtitle, actions }) => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 22 }}>
+    <div>
+      <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: -1, color: C.accent, margin: 0 }}>{title}</h1>
+      {subtitle && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{subtitle}</div>}
+    </div>
+    {actions && <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>{actions}</div>}
+  </div>
+);
+
 // ─── BAR & LINE CHARTS ───────────────────────────────────────────────────────
 const BarChart = ({ data, height = 120 }) => {
   if (!data.length) return null;
@@ -1470,24 +1482,31 @@ function PreparationPage({ state, dispatch }) {
   const [forceOpen, setForceOpen] = useState(false);
   const showFlow = !log || forceOpen;
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "32px 20px" }}>
+    <div style={{ height: "100%", overflowY: "auto", padding: "40px 20px" }}>
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 34 }}>
-          <div style={{ fontSize: 22, fontWeight: 800 }}>Pre-Session Preparation</div>
-          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 6, lineHeight: 1.6, maxWidth: 460, marginLeft: "auto", marginRight: "auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ display: "inline-flex", width: 56, height: 56, borderRadius: 16, background: C.accentDim, border: `1px solid ${C.accent}40`, alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+            <NavIcon name="preparation" size={26} color={C.accent} />
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>Pre-Session Preparation</div>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 8, lineHeight: 1.6, maxWidth: 460, marginLeft: "auto", marginRight: "auto" }}>
             A short Arrive → Breathe → Your Lean → Commit check-in. Run it before any session, as many times as you want.
           </div>
         </div>
-        {showFlow ? (
-          <RitualFlow key={redoTick} state={state} dispatch={dispatch} onDone={() => setForceOpen(false)} />
-        ) : (
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>You're set for the {mainSessionFor(new Date())} session.</div>
-            {log?.intention && <div style={{ fontSize: 14, color: C.accent, fontWeight: 600, marginBottom: 16 }}>"{log.intention}"</div>}
-            <Btn variant="ghost" onClick={() => { setRedoTick(t => t + 1); setForceOpen(true); }}>Do it again</Btn>
-          </div>
-        )}
+        <Card style={{ padding: 28 }}>
+          {showFlow ? (
+            <RitualFlow key={redoTick} state={state} dispatch={dispatch} onDone={() => setForceOpen(false)} />
+          ) : (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ display: "inline-flex", width: 64, height: 64, borderRadius: "50%", background: C.accentDim, alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                <span style={{ fontSize: 30, color: C.accent }}>✓</span>
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>You're set for the {mainSessionFor(new Date())} session.</div>
+              {log?.intention && <div style={{ fontSize: 14, color: C.accent, fontWeight: 600, marginBottom: 16 }}>"{log.intention}"</div>}
+              <Btn variant="ghost" onClick={() => { setRedoTick(t => t + 1); setForceOpen(true); }}>Do it again</Btn>
+            </div>
+          )}
+        </Card>
       </div>
     </div>
   );
@@ -4451,6 +4470,7 @@ function MyRecord({ state }) {
   const pool = trades.filter(t => activeAccount === "all" || t.account === activeAccount);
   const now = new Date();
   const year = now.getFullYear(), month = now.getMonth();
+  const [tab, setTab] = useState("lifetime");
 
   const lifetimeStats = buildRecordStats(pool);
 
@@ -4460,17 +4480,22 @@ function MyRecord({ state }) {
   const monthPool = pool.filter(t => { const d = new Date(t.date); return d.getFullYear() === year && d.getMonth() === month; });
   const monthStats = buildRecordStats(monthPool);
 
+  const periods = [
+    { id: "lifetime", label: "Lifetime", title: "Lifetime", sub: "All trades logged", stats: lifetimeStats },
+    { id: "year", label: `${year}`, title: `${year}`, sub: "This year", stats: yearStats },
+    { id: "month", label: "This Month", title: now.toLocaleDateString("en-US", { month: "long", year: "numeric" }), sub: "This month", stats: monthStats },
+  ];
+  const active = periods.find(p => p.id === tab) || periods[0];
+
   return (
-    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
-      <div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> My Record</h1>
-        <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Your green day vs. red day track record — lifetime, this year, and this month.</div>
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="My Record" subtitle="Your green day vs. red day track record — lifetime, this year, and this month." />
+      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, marginBottom: 18, maxWidth: 460 }}>
+        {periods.map(p => (
+          <button key={p.id} onClick={() => setTab(p.id)} style={{ flex: 1, padding: "9px 12px", borderRadius: 999, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: tab === p.id ? C.accent : "transparent", color: tab === p.id ? "#000" : C.textMuted }}>{p.label}</button>
+        ))}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <RecordRow title="Lifetime" sub="All trades logged" stats={lifetimeStats} />
-        <RecordRow title={`${year}`} sub="This year" stats={yearStats} />
-        <RecordRow title={now.toLocaleDateString("en-US", { month: "long", year: "numeric" })} sub="This month" stats={monthStats} />
-      </div>
+      <RecordRow title={active.title} sub={active.sub} stats={active.stats} />
     </div>
   );
 }
@@ -4606,13 +4631,14 @@ function MyNotes({ state, dispatch }) {
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.accent }}>✓ My Notes</h1>
+        <div style={{ display: "inline-flex", width: 44, height: 44, borderRadius: 12, background: C.accentDim, alignItems: "center", justifyContent: "center", marginBottom: 10 }}><NavIcon name="mynotes" size={20} color={C.accent} /></div>
+        <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: C.accent, margin: 0 }}>My Notes</h1>
         <div style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", marginTop: 4 }}>"For as a man thinks in his heart, so is he"</div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 6, maxWidth: 640, margin: "0 auto", width: "100%" }}>
+      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, maxWidth: 640, margin: "0 auto", width: "100%" }}>
         {[["graces", "🚩 Graces and Goals"], ["daily", "📄 Daily Notes"], ["past", "📅 Past Entries"]].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "10px 12px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "10px 12px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
             background: tab === id ? `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)` : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
         ))}
       </div>
@@ -5624,15 +5650,16 @@ function Strategies({ state, dispatch }) {
   const openAdd = () => atCap ? dispatch({ type: "OPEN_MODAL", modal: "upgrade" }) : setAdding(a => !a);
   const openDetail = (s) => dispatch({ type: "OPEN_MODAL", modal: { type: "playbook_detail", id: s.id } });
   return (
-    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, flex: 1, color: C.accent }}>✓ Playbook</h1>
-        {atCap && <Badge color={C.purple}>{strategies.length}/{FREE_LIMITS.maxSetups} setups (Journal Basic)</Badge>}
-        <Btn small onClick={openAdd}>+ New Setup {atCap && <PlusBadge small />}</Btn>
-      </div>
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Playbook" subtitle="Your documented setups — rules, checklists, and performance per strategy." actions={
+        <>
+          {atCap && <Badge color={C.purple}>{strategies.length}/{FREE_LIMITS.maxSetups} setups (Journal Basic)</Badge>}
+          <Btn small onClick={openAdd}>+ New Setup {atCap && <PlusBadge small />}</Btn>
+        </>
+      } />
       {atCap && <InlineUpgradeLock dispatch={dispatch} text={`You've reached the Journal Basic limit of ${FREE_LIMITS.maxSetups} Playbook setups. Upgrade to Journal Plus for unlimited setups.`} />}
       {adding && !atCap && (
-        <Card style={{ borderColor: C.accentHover }}>
+        <Card style={{ border: `1px solid ${C.accent}55`, marginBottom: 18 }}>
           <h3 style={{ marginBottom: 14, fontSize: 16, fontWeight: 700 }}>New Setup</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Inp label="Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Breakout" />
@@ -6442,97 +6469,101 @@ function Analytics({ state }) {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "analytics_export.csv"; a.click();
   };
 
+  const [tab, setTab] = useState("overview");
+
   return (
-    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 26 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 22, color: C.accent }}>✓</span>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, color: C.accent }}>Analytics</h1>
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", rowGap: 8 }}>
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Analytics" subtitle="Deep performance breakdowns across setups, symbols, and time." actions={
+        <>
           {["7D", "30D", "90D", "All"].map(r => <Btn key={r} small variant={range === r ? "success" : "ghost"} onClick={() => setRange(r)}>{r}</Btn>)}
           <Btn small variant="gradient2" onClick={exportCSV} style={{ whiteSpace: "nowrap" }}>Export Data</Btn>
-        </div>
-      </div>
+        </>
+      } />
 
-      {/* Performance Summary */}
-      <div>
-        <SectionLabel>Performance Summary</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-          <StatCard label="Net P&L" value={fmt$(stats.netPnl)} color={stats.netPnl >= 0 ? C.accent : C.red} icon="$" tone={stats.netPnl >= 0 ? "positive" : "negative"} />
-          <StatCard label="Win Rate %" value={`${stats.winRate.toFixed(1)}%`} sub={`${stats.wins}W / ${stats.losses}L`} color={stats.winRate >= 50 ? C.accent : C.text} icon="◎" tone={stats.winRate >= 50 ? "positive" : "neutral"} />
-          <StatCard label="Total Trades" value={filtered.length} sub={`${stats.wins} wins`} icon="✓" tone="neutral" />
-          <StatCard label="Profit Factor" value={stats.profitFactor >= 99 ? "∞" : stats.profitFactor.toFixed(2)} color={C.accent} icon="🏆" tone="positive" />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginTop: 14 }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-              <span style={{ fontSize: 14, color: C.textMuted, display: "flex", alignItems: "center" }}>⚖</span>
-              <span style={{ fontSize: 13.5, color: C.textMuted, fontWeight: 500, flex: 1 }}>Avg win/loss ratio</span>
-            </div>
-            <div className="mono" style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>{ratio >= 99 ? "∞" : ratio.toFixed(1)}</div>
-            <div style={{ height: 6, borderRadius: 3, overflow: "hidden", display: "flex", background: C.border }}>
-              <div style={{ width: `${Math.min(100, (stats.avgWin / (stats.avgWin + stats.avgLoss || 1)) * 100)}%`, background: C.accent }} />
-              <div style={{ flex: 1, background: C.red }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.textDim, marginTop: 6 }}><span style={{ color: C.accent }}>{fmt$(stats.avgWin)}</span><span style={{ color: C.red }}>{fmt$(-stats.avgLoss)}</span></div>
-          </div>
-          <StatCard label="Trade Expectancy" value={fmt$(stats.expectancy)} color={stats.expectancy >= 0 ? C.accent : C.red} icon="◎" tone="neutral" />
-          <StatCard label="Total Fees" value={`-${totalFees.toFixed(2)}`} color={C.red} icon="$" tone="neutral" />
-          <StatCard label="Day Win %" value={`${dayWinPct.toFixed(1)}%`} sub={`${multiTradeDays} multi-trade days`} color={C.accent} icon="📅" tone="neutral" />
-        </div>
-      </div>
-
-      {/* Trade Statistics */}
-      <div>
-        <SectionLabel>Trade Statistics</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-          <StatCard label="Avg Win" value={fmt$(stats.avgWin)} color={C.accent} icon="✓" tone="positive" />
-          <StatCard label="Avg Loss" value={fmt$(-stats.avgLoss)} color={C.red} icon="✓" tone="negative" />
-          <StatCard label="Largest Win" value={fmt$(largestWin)} color={C.accent} icon="🏆" tone="positive" />
-          <StatCard label="Largest Loss" value={fmt$(largestLoss)} color={C.red} icon="✓" tone="negative" />
-        </div>
-      </div>
-
-      {/* Daily P&L + Win/Loss Distribution */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16 }}>
-        <Card>
-          <SectionLabel>Daily P&L</SectionLabel>
-          <GridBarChart data={dailyData} height={260} />
-        </Card>
-        <Card style={{ display: "flex", flexDirection: "column" }}>
-          <SectionLabel>Win/Loss Distribution</SectionLabel>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <DonutChart segments={[{ label: "Wins", value: stats.wins, color: C.accent }, { label: "Losses", value: stats.losses, color: C.red }]} />
+      {/* Hero row — featured Net P&L + Win Rate cards, matching the Dashboard's language */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 16, marginBottom: 18 }}>
+        <Card style={{ background: `linear-gradient(135deg, ${(stats.netPnl >= 0 ? C.accent : C.red)}12, transparent 65%)`, border: `1px solid ${(stats.netPnl >= 0 ? C.accent : C.red)}40` }}>
+          <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5 }}>Net P&amp;L · {filtered.length} trades</div>
+          <div className="mono" style={{ fontSize: 42, fontWeight: 800, color: stats.netPnl >= 0 ? C.accent : C.red, letterSpacing: -1.5, margin: "8px 0" }}>{fmt$(stats.netPnl)}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Badge color={stats.profitFactor >= 1 ? C.accent : C.red}>PF {stats.profitFactor >= 99 ? "∞" : stats.profitFactor.toFixed(2)}</Badge>
+            <Badge color={stats.expectancy >= 0 ? C.accent : C.red}>Expectancy {fmt$(stats.expectancy)}</Badge>
           </div>
         </Card>
+        <StatCard label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} sub={`${stats.wins}W / ${stats.losses}L`} color={stats.winRate >= 50 ? C.accent : C.text} icon="◎" tone={stats.winRate >= 50 ? "positive" : "neutral"} />
+        <StatCard label="Day Win %" value={`${dayWinPct.toFixed(1)}%`} sub={`${multiTradeDays} multi-trade days`} color={C.accent} icon="📅" tone="neutral" />
       </div>
 
-      {/* Performance by Setup */}
-      <Card>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}><span>📊</span><span style={{ fontSize: 15, fontWeight: 700 }}>Performance by Setup</span></div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {["All", "Wins", "Losses"].map(v => <Btn key={v} small variant={setupView === v ? "success" : "ghost"} onClick={() => setSetupView(v)}>{v}</Btn>)}
+      {/* Ticker strip — secondary metrics */}
+      <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, marginBottom: 22 }}>
+        {[
+          { label: "Avg Win/Loss Ratio", value: ratio >= 99 ? "∞" : ratio.toFixed(1) },
+          { label: "Avg Win", value: fmt$(stats.avgWin), color: C.accent },
+          { label: "Avg Loss", value: fmt$(-stats.avgLoss), color: C.red },
+          { label: "Largest Win", value: fmt$(largestWin), color: C.accent },
+          { label: "Largest Loss", value: fmt$(largestLoss), color: C.red },
+          { label: "Total Fees", value: `-${totalFees.toFixed(2)}`, color: C.red },
+        ].map((s, i) => (
+          <div key={i} style={{ flexShrink: 0, minWidth: 150, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 16px" }}>
+            <div style={{ fontSize: 10.5, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{s.label}</div>
+            <div className="mono" style={{ fontSize: 19, fontWeight: 800, marginTop: 4, color: s.color || C.text }}>{s.value}</div>
           </div>
+        ))}
+      </div>
+
+      {/* Sub-navigation — splits what used to be one long stacked scroll into categories */}
+      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, marginBottom: 20, maxWidth: 480 }}>
+        {[["overview", "Overview"], ["setups", "Setups & Behavior"], ["symbols", "Symbols & Time"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "9px 10px", borderRadius: 999, border: "none", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: tab === id ? C.accent : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16 }}>
+            <Card>
+              <SectionLabel>Daily P&L</SectionLabel>
+              <GridBarChart data={dailyData} height={260} />
+            </Card>
+            <Card style={{ display: "flex", flexDirection: "column" }}>
+              <SectionLabel>Win/Loss Distribution</SectionLabel>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <DonutChart segments={[{ label: "Wins", value: stats.wins, color: C.accent }, { label: "Losses", value: stats.losses, color: C.red }]} />
+              </div>
+            </Card>
+          </div>
+          <Card><EquityCurveChart trades={filtered} height={300} /></Card>
         </div>
-        <GridBarChart data={setupData} height={260} />
-      </Card>
+      )}
 
-      <StatBreakdownSection icon="🕐" title="Time Frame Entry Statistics" trades={filtered} field="timeframe" strategies={state.strategies} colorFn={timeframeColor} />
-      <StatBreakdownSection icon="🌐" title="Trading Session Statistics" trades={filtered} field="session" strategies={state.strategies} colorFn={sessionColorMap} />
-      <StatBreakdownSection icon="⚠" title="Risk Meter Statistics" trades={filtered} field="risk" strategies={state.strategies} colorFn={riskColor} />
-      <StatBreakdownSection icon="📈" title="Trend Alignment Statistics" trades={filtered} field="trendBias" strategies={state.strategies} colorFn={trendColor} />
+      {tab === "setups" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <Card>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}><span>📊</span><span style={{ fontSize: 15, fontWeight: 700 }}>Performance by Setup</span></div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["All", "Wins", "Losses"].map(v => <Btn key={v} small variant={setupView === v ? "success" : "ghost"} onClick={() => setSetupView(v)}>{v}</Btn>)}
+              </div>
+            </div>
+            <GridBarChart data={setupData} height={260} />
+          </Card>
 
-      <LongShortCards trades={filtered} />
-      <TopSymbolsTable trades={filtered} />
-      <TimeOfDaySection trades={filtered} />
-      <DurationSection trades={filtered} />
-      <DayOfWeekSection trades={filtered} />
+          <StatBreakdownSection icon="🕐" title="Time Frame Entry Statistics" trades={filtered} field="timeframe" strategies={state.strategies} colorFn={timeframeColor} />
+          <StatBreakdownSection icon="🌐" title="Trading Session Statistics" trades={filtered} field="session" strategies={state.strategies} colorFn={sessionColorMap} />
+          <StatBreakdownSection icon="⚠" title="Risk Meter Statistics" trades={filtered} field="risk" strategies={state.strategies} colorFn={riskColor} />
+          <StatBreakdownSection icon="📈" title="Trend Alignment Statistics" trades={filtered} field="trendBias" strategies={state.strategies} colorFn={trendColor} />
+        </div>
+      )}
 
-      <Card><EquityCurveChart trades={filtered} height={300} /></Card>
+      {tab === "symbols" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <LongShortCards trades={filtered} />
+          <TopSymbolsTable trades={filtered} />
+          <TimeOfDaySection trades={filtered} />
+          <DurationSection trades={filtered} />
+          <DayOfWeekSection trades={filtered} />
+        </div>
+      )}
     </div>
   );
 }
@@ -6836,21 +6867,18 @@ function EmotionsScore({ state, dispatch, setPage }) {
     return [p1, p2, p3];
   })();
 
+  const [tab, setTab] = useState("overview");
+
   return (
-    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 260 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> Edge Score</h1>
-          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Understand your emotional patterns and their impact on trading performance.</div>
-        </div>
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Edge Score" subtitle="Understand your emotional patterns and their impact on trading performance." actions={
         <div style={{ display: "flex", gap: 6 }}>
           {["7D", "30D", "90D", "All"].map(r => <Btn key={r} small variant={range === r ? "success" : "ghost"} onClick={() => setRange(r)}>{r}</Btn>)}
         </div>
-      </div>
+      } />
 
       {!hasAnyData && (
-        <Card style={{ textAlign: "center", padding: 40 }}>
+        <Card style={{ textAlign: "center", padding: 40, marginBottom: 20 }}>
           <div style={{ fontSize: 30, marginBottom: 10, opacity: 0.6 }}>⚡</div>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>No behavioral data logged yet</div>
           <div style={{ fontSize: 13, color: C.textDim, marginBottom: 16 }}>Log mood, exit behavior, post-trade state, and risk level when adding trades to build your Behavioral Edge Score.</div>
@@ -6858,313 +6886,319 @@ function EmotionsScore({ state, dispatch, setPage }) {
         </Card>
       )}
 
-      {/* Top stat row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-        <Card>
+      {/* Hero — featured edge score card + 3 supporting stats, asymmetric split */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
+        <Card style={{ background: `linear-gradient(135deg, ${zone.color}12, transparent 65%)`, border: `1px solid ${zone.color}40` }}>
           <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Period Avg Edge Score</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-            <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: zone.color }}>{avgEdge.toFixed(2)}</div>
-            <div style={{ fontSize: 13, color: C.textDim }}>/ 10</div>
+            <div className="mono" style={{ fontSize: 40, fontWeight: 800, color: zone.color }}>{avgEdge.toFixed(2)}</div>
+            <div style={{ fontSize: 14, color: C.textDim }}>/ 10</div>
           </div>
           <Badge color={zone.color}>{zone.label}</Badge>
           <div style={{ fontSize: 11, color: C.textDim, marginTop: 8 }}>
             {avgEdgePrior != null ? (avgEdge >= avgEdgePrior ? `▲ +${(avgEdge - avgEdgePrior).toFixed(2)} vs prior ${range}` : `▼ ${(avgEdge - avgEdgePrior).toFixed(2)} vs prior ${range}`) : "No prior period comparison"}
           </div>
-          <div style={{ fontSize: 11, color: C.textDim }}>{range === "All" ? "All time" : `Last ${range}`}</div>
         </Card>
-        <Card>
-          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Most Common Mindset</div>
-          <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: moodMode ? moodColor(moodMode.value) : C.text }}>{moodMode ? moodMode.value : "—"}</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>{moodMode ? `${moodMode.count} trades` : "No mood logged"}</div>
-        </Card>
-        <Card>
-          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Outcome Neutral Rate</div>
-          <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: C.accent }}>{outcomeNeutralRate.toFixed(0)}%</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>Remained detached from outcome</div>
-        </Card>
-        <Card>
-          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Total Trades Analyzed</div>
-          <div className="mono" style={{ fontSize: 30, fontWeight: 800 }}>{filtered.length}</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>In selected period</div>
-        </Card>
+        <StatCard label="Most Common Mindset" value={moodMode ? moodMode.value : "—"} color={moodMode ? moodColor(moodMode.value) : C.text} sub={moodMode ? `${moodMode.count} trades` : "No mood logged"} />
+        <StatCard label="Outcome Neutral Rate" value={`${outcomeNeutralRate.toFixed(0)}%`} color={C.accent} sub="Remained detached from outcome" />
+        <StatCard label="Trades Analyzed" value={filtered.length} sub="In selected period" />
       </div>
 
-      {/* Thermometer */}
-      <Card>
-        <SectionLabel>Behavioral Edge Thermometer</SectionLabel>
-        <GradientZoneBar value={Math.max(0, Math.min(10, avgEdge))} max={10} zones={thermoZones} />
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 10, color: C.textDim }}>
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <span key={n}>{n}</span>)}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 18 }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.red, marginBottom: 4 }}>Red Zone (0–3)</div>
-            <div style={{ fontSize: 12, color: C.textMuted }}>Elevated emotional pressure. Risk of impulsive execution.</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.yellow, marginBottom: 4 }}>Yellow Zone (3–7)</div>
-            <div style={{ fontSize: 12, color: C.textMuted }}>Mixed mindset. Variable execution.</div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, marginBottom: 4 }}>Green Zone (7–10)</div>
-            <div style={{ fontSize: 12, color: C.textMuted }}>Stable, process-focused mindset.</div>
-          </div>
-        </div>
-        <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Trader Benchmarks</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {[
-              { key: "red", label: "Poor Discipline Trader", desc: "Frequent emotional trading. Reactive exits. Low outcome neutrality.", color: C.red },
-              { key: "yellow", label: "Disciplined Trader", desc: "Mostly process-driven. Occasional emotional interference. Improving consistency.", color: C.yellow },
-              { key: "green", label: "Professional Trader / Elite Mindset", desc: "Consistent execution. Strong emotional regulation. Follows plan.", color: C.accent },
-            ].map(b => (
-              <div key={b.key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, background: zone.key === b.key ? b.color + "14" : "transparent", border: zone.key === b.key ? `1px solid ${b.color}44` : "1px solid transparent" }}>
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: b.color, marginTop: 5, flexShrink: 0 }} />
-                <div><span style={{ fontWeight: 700, fontSize: 13, color: b.color }}>{b.label}</span><div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{b.desc}</div></div>
+      {/* Sub-navigation */}
+      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, marginBottom: 20, maxWidth: 480 }}>
+        {[["overview", "Overview"], ["behavior", "Behavior Patterns"], ["data", "Data"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "9px 10px", borderRadius: 999, border: "none", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: tab === id ? C.accent : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Thermometer */}
+          <Card>
+            <SectionLabel>Behavioral Edge Thermometer</SectionLabel>
+            <GradientZoneBar value={Math.max(0, Math.min(10, avgEdge))} max={10} zones={thermoZones} />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 10, color: C.textDim }}>
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <span key={n}>{n}</span>)}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 18 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.red, marginBottom: 4 }}>Red Zone (0–3)</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>Elevated emotional pressure. Risk of impulsive execution.</div>
               </div>
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      {/* Coaching Insight */}
-      <Card>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span style={{ fontSize: 16 }}>📈</span><span style={{ fontWeight: 700, fontSize: 15 }}>Coaching Insight</span></div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13, color: C.textMuted, lineHeight: 1.7 }}>
-          {coachingInsight.map((p, i) => <div key={i} style={i === coachingInsight.length - 1 ? { color: C.accent, fontWeight: 600 } : {}}>{p}</div>)}
-        </div>
-      </Card>
-
-      {/* Emotional Performance Breakdown */}
-      <Card style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "18px 20px 14px" }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>Emotional Performance Breakdown</div>
-          <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Performance metrics by dominant pre-trade emotion.</div>
-        </div>
-        {moodRows.length === 0 ? <div style={{ padding: "0 20px 20px", color: C.textDim, fontSize: 13 }}>No moods logged yet.</div> : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
-              <thead>
-                <tr>
-                  {["Emotion", "Trades", "Avg Edge", "Win Rate", "Avg P&L", "Late-Loss %", "Neutral %"].map((h, i) => (
-                    <th key={h} style={{ textAlign: i === 0 ? "left" : "right", padding: "10px 20px", fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {moodRows.map(m => (
-                  <tr key={m.label} style={{ borderBottom: `1px solid ${C.border}20` }}>
-                    <td style={{ padding: "11px 20px", fontWeight: 700, color: moodColor(m.label) }}>{m.label}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right" }}>{m.count}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right" }} className="mono">{m.avgEdge.toFixed(1)}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right", color: m.winRate >= 50 ? C.accent : C.red }} className="mono">{m.winRate.toFixed(0)}%</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right", color: m.avgPnl >= 0 ? C.accent : C.red }} className="mono">{fmt$(m.avgPnl)}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right", color: m.lateLossPct > 0 ? C.red : C.textMuted }} className="mono">{m.lateLossPct.toFixed(0)}%</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right" }} className="mono">{m.neutralPct.toFixed(0)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {(bestMoodRow || worstMoodRow) && (
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "16px 20px" }}>
-            {bestMoodRow && <Badge color={C.accent}>🟢 Highest Performing: {bestMoodRow.label} ({bestMoodRow.avgEdge.toFixed(1)} avg edge, {bestMoodRow.count} trades)</Badge>}
-            {worstMoodRow && <Badge color={C.red}>🔴 Most Risk: {worstMoodRow.label} ({worstMoodRow.avgEdge.toFixed(1)} avg edge, {worstMoodRow.count} trades)</Badge>}
-          </div>
-        )}
-        {bestMoodRow && (
-          <div style={{ margin: "0 20px 20px", padding: 14, background: C.bg, borderRadius: 10 }}>
-            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Emotional Pattern Insight</div>
-            <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6 }}>
-              Your performance improves significantly when trading {bestMoodRow.label}. Continue prioritizing structured preparation.{worstMoodRow && worstMoodRow.label !== bestMoodRow.label ? ` ${worstMoodRow.label}-related trades show more inconsistency and emotional volatility — consider a mandatory cooldown before entering in that state.` : ""}
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.yellow, marginBottom: 4 }}>Yellow Zone (3–7)</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>Mixed mindset. Variable execution.</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, marginBottom: 4 }}>Green Zone (7–10)</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>Stable, process-focused mindset.</div>
+              </div>
             </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Exit Behavior Analysis */}
-      <Card>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Exit Behavior Analysis</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
-          <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
-            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Planned Exit Rate</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.accent }}>{plannedRate.toFixed(0)}%</div>
-          </div>
-          <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
-            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Exit Discipline Score</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.blue }}>{exitDisciplineScore.toFixed(0)}%</div>
-          </div>
-          <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
-            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Late-Loss Count</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.red }}>{lateLossExits.length}</div>
-          </div>
-          <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
-            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Severe Combos</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.red }}>{severeCombos.length}</div>
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 20 }}>
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Exit Behavior Distribution</div>
-              {mostCommonExit && <div style={{ fontSize: 12, color: C.textMuted }}>Most common: <b style={{ color: C.text }}>{mostCommonExit.label.replace("As ", "")}</b></div>}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {exitDist.map(d => (
-                <div key={d.label}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
-                    <span style={{ color: C.textMuted }}>{d.label}</span>
-                    <span style={{ fontWeight: 700, color: d.color }}>({d.n}) {d.pct}%</span>
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Trader Benchmarks</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  { key: "red", label: "Poor Discipline Trader", desc: "Frequent emotional trading. Reactive exits. Low outcome neutrality.", color: C.red },
+                  { key: "yellow", label: "Disciplined Trader", desc: "Mostly process-driven. Occasional emotional interference. Improving consistency.", color: C.yellow },
+                  { key: "green", label: "Professional Trader / Elite Mindset", desc: "Consistent execution. Strong emotional regulation. Follows plan.", color: C.accent },
+                ].map(b => (
+                  <div key={b.key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, background: zone.key === b.key ? b.color + "14" : "transparent", border: zone.key === b.key ? `1px solid ${b.color}44` : "1px solid transparent" }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: b.color, marginTop: 5, flexShrink: 0 }} />
+                    <div><span style={{ fontWeight: 700, fontSize: 13, color: b.color }}>{b.label}</span><div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{b.desc}</div></div>
                   </div>
-                  <div style={{ height: 6, borderRadius: 3, background: C.border, overflow: "hidden" }}><div style={{ width: `${d.pct}%`, height: "100%", background: d.color }} /></div>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          {/* Coaching Insight */}
+          <Card>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span style={{ fontSize: 16 }}>📈</span><span style={{ fontWeight: 700, fontSize: 15 }}>Coaching Insight</span></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13, color: C.textMuted, lineHeight: 1.7 }}>
+              {coachingInsight.map((p, i) => <div key={i} style={i === coachingInsight.length - 1 ? { color: C.accent, fontWeight: 600 } : {}}>{p}</div>)}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {tab === "behavior" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Emotional Performance Breakdown */}
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "18px 20px 14px" }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>Emotional Performance Breakdown</div>
+              <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Performance metrics by dominant pre-trade emotion.</div>
+            </div>
+            {moodRows.length === 0 ? <div style={{ padding: "0 20px 20px", color: C.textDim, fontSize: 13 }}>No moods logged yet.</div> : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+                  <thead>
+                    <tr>
+                      {["Emotion", "Trades", "Avg Edge", "Win Rate", "Avg P&L", "Late-Loss %", "Neutral %"].map((h, i) => (
+                        <th key={h} style={{ textAlign: i === 0 ? "left" : "right", padding: "10px 20px", fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {moodRows.map(m => (
+                      <tr key={m.label} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                        <td style={{ padding: "11px 20px", fontWeight: 700, color: moodColor(m.label) }}>{m.label}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right" }}>{m.count}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right" }} className="mono">{m.avgEdge.toFixed(1)}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right", color: m.winRate >= 50 ? C.accent : C.red }} className="mono">{m.winRate.toFixed(0)}%</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right", color: m.avgPnl >= 0 ? C.accent : C.red }} className="mono">{fmt$(m.avgPnl)}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right", color: m.lateLossPct > 0 ? C.red : C.textMuted }} className="mono">{m.lateLossPct.toFixed(0)}%</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right" }} className="mono">{m.neutralPct.toFixed(0)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {(bestMoodRow || worstMoodRow) && (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "16px 20px" }}>
+                {bestMoodRow && <Badge color={C.accent}>🟢 Highest Performing: {bestMoodRow.label} ({bestMoodRow.avgEdge.toFixed(1)} avg edge, {bestMoodRow.count} trades)</Badge>}
+                {worstMoodRow && <Badge color={C.red}>🔴 Most Risk: {worstMoodRow.label} ({worstMoodRow.avgEdge.toFixed(1)} avg edge, {worstMoodRow.count} trades)</Badge>}
+              </div>
+            )}
+            {bestMoodRow && (
+              <div style={{ margin: "0 20px 20px", padding: 14, background: C.bg, borderRadius: 10 }}>
+                <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Emotional Pattern Insight</div>
+                <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6 }}>
+                  Your performance improves significantly when trading {bestMoodRow.label}. Continue prioritizing structured preparation.{worstMoodRow && worstMoodRow.label !== bestMoodRow.label ? ` ${worstMoodRow.label}-related trades show more inconsistency and emotional volatility — consider a mandatory cooldown before entering in that state.` : ""}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Exit Behavior Analysis */}
+          <Card>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Exit Behavior Analysis</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Planned Exit Rate</div>
+                <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.accent }}>{plannedRate.toFixed(0)}%</div>
+              </div>
+              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Exit Discipline Score</div>
+                <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.blue }}>{exitDisciplineScore.toFixed(0)}%</div>
+              </div>
+              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Late-Loss Count</div>
+                <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.red }}>{lateLossExits.length}</div>
+              </div>
+              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Severe Combos</div>
+                <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.red }}>{severeCombos.length}</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 20 }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Exit Behavior Distribution</div>
+                  {mostCommonExit && <div style={{ fontSize: 12, color: C.textMuted }}>Most common: <b style={{ color: C.text }}>{mostCommonExit.label.replace("As ", "")}</b></div>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {exitDist.map(d => (
+                    <div key={d.label}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
+                        <span style={{ color: C.textMuted }}>{d.label}</span>
+                        <span style={{ fontWeight: 700, color: d.color }}>({d.n}) {d.pct}%</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 3, background: C.border, overflow: "hidden" }}><div style={{ width: `${d.pct}%`, height: "100%", background: d.color }} /></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Performance Correlations</div>
+                <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>Avg Edge Score by Exit Type</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {edgeByExit.map(e => (
+                      <div key={e.label}><span style={{ fontSize: 11, color: C.textMuted }}>{e.label}: </span><span className="mono" style={{ fontWeight: 700, fontSize: 13 }}>{e.avgEdge != null ? e.avgEdge.toFixed(1) : "—"}</span></div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>Avg P&L by Exit Type</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {edgeByExit.map(e => (
+                      <div key={e.label}><span style={{ fontSize: 11, color: C.textMuted }}>{e.label}: </span><span className="mono" style={{ fontWeight: 700, fontSize: 13, color: e.avgPnl == null ? C.text : e.avgPnl >= 0 ? C.accent : C.red }}>{e.avgPnl != null ? fmt$(e.avgPnl) : "—"}</span></div>
+                    ))}
+                  </div>
+                </div>
+                {severeCombos.length > 0 && (
+                  <div style={{ background: C.redDim, border: `1px solid ${C.red}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 8, fontSize: 12, color: C.red }}>
+                    <b>⚠ Severe Combo Impact</b><div style={{ marginTop: 2 }}>{severeFreqPct.toFixed(0)}% frequency across logged trades</div>
+                  </div>
+                )}
+                <div style={{ background: plannedRate >= 60 ? C.accentDim : C.yellowDim, border: `1px solid ${(plannedRate >= 60 ? C.accent : C.yellow)}40`, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: plannedRate >= 60 ? C.accent : C.yellow }}>
+                  {plannedRate >= 60 ? "Strong discipline" : "Needs improvement"}: {plannedRate.toFixed(0)}% planned exits
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Emotional Stability Score */}
+          <Card>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Emotional Stability Score</div>
+            <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 24, alignItems: "start" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                  <span className="mono" style={{ fontSize: 40, fontWeight: 800, color: stabilityTier.color }}>{Math.max(0, stabilityScore)}</span>
+                  <span style={{ fontSize: 18, color: C.textDim }}>%</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, marginBottom: 8 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: stabilityTier.color }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: stabilityTier.color }}>{stabilityTier.label}</span>
+                </div>
+                <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6, marginBottom: 14 }}>
+                  {stabilityScore >= 80 ? "Your mindset is highly consistent trade to trade." : stabilityScore >= 60 ? "Your emotional state is largely stable across trades." : stabilityScore >= 35 ? "Emotional patterns are forming. Continued consistency will improve execution stability." : "Your emotional state changes frequently between trades. This tends to hurt execution consistency."}
+                </div>
+                <GradientZoneBar value={Math.max(0, Math.min(100, stabilityScore))} max={100} zones={stabilityZones} height={16} />
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9, color: C.textDim }}>
+                  <span>Reactive</span><span>Developing</span><span>Stable</span><span>Elite</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Emotional Behavior Breakdown</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                  <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Trades Analyzed</div><div className="mono" style={{ fontSize: 20, fontWeight: 800 }}>{filtered.length}</div></div>
+                  <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Emotion Shift Rate</div><div className="mono" style={{ fontSize: 20, fontWeight: 800 }}>{shiftRate.toFixed(0)}%</div></div>
+                  <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Longest Focus Streak</div><div className="mono" style={{ fontSize: 20, fontWeight: 800 }}>{longestStreak}</div></div>
+                  <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Most Frequent Shift</div><div style={{ fontSize: 15, fontWeight: 800 }}>{freqShift ? freqShift.key : "—"}</div></div>
+                </div>
+                <div style={{ background: C.bg, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: C.textMuted, marginBottom: 10 }}>
+                  {shiftRate < 30 ? "Low variability. Your emotional state is carrying over well between trades." : shiftRate < 55 ? "Moderate variability. Reinforcing a dominant emotional state may improve consistency." : "High variability. Your emotional state resets often — a short pre-trade routine may help anchor it."}
+                </div>
+                <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.6 }}>What this measures: tracks how often your emotional state changes between trades. Higher stability typically leads to more consistent execution.</div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Top 3 Recommendations */}
+          <Card>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Top {recommendations.length} Recommendation{recommendations.length !== 1 ? "s" : ""}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {recommendations.map((r, i) => (
+                <div key={r.id} style={{ background: C.bg, borderRadius: 12, padding: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: C.textDim }}>#{i + 1}</span>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{r.title}</span>
+                    <Badge color={sevColor(r.severity)}>{r.severity}</Badge>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12, lineHeight: 1.6 }}>{r.text}</div>
+                  {openRec === r.id && <div style={{ fontSize: 12, color: C.textDim, background: C.surfaceHigh, borderRadius: 8, padding: 12, marginBottom: 12, lineHeight: 1.6 }}>{r.detail}</div>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <Btn small variant="ghost" onClick={() => setOpenRec(o => o === r.id ? null : r.id)}>{openRec === r.id ? "▴ Hide" : "▾ View Experiment"}</Btn>
+                    <Btn small variant={startedRecs[r.id] ? "success" : "primary"} onClick={() => setStartedRecs(s => ({ ...s, [r.id]: !s[r.id] }))}>{startedRecs[r.id] ? "✓ Started" : "▷ Start"}</Btn>
+                  </div>
                 </div>
               ))}
             </div>
+          </Card>
+        </div>
+      )}
+
+      {tab === "data" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Daily Edge Score */}
+          <Card>
+            <SectionLabel>Daily Edge Score (Last 30 Days)</SectionLabel>
+            <EdgeLineChart data={dailyEdgeData} height={260} />
+          </Card>
+
+          {/* Avg P&L by Emotion + Win Rate by Emotion */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <Card>
+              <SectionLabel>Average P&L by Emotion</SectionLabel>
+              <GridBarChart data={avgPnlByMood} height={260} colorFn={(d) => moodColor(d.label)} />
+            </Card>
+            <Card>
+              <SectionLabel>Win Rate by Emotion (%)</SectionLabel>
+              <GridBarChart data={winRateByMood} height={260} colorFn={() => C.blue} yMin={0} yMax={100} axisFormat={v => `${Math.round(v)}%`} tooltipFormat={v => `${Math.round(v)}%`} />
+            </Card>
           </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Performance Correlations</div>
-            <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>Avg Edge Score by Exit Type</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {edgeByExit.map(e => (
-                  <div key={e.label}><span style={{ fontSize: 11, color: C.textMuted }}>{e.label}: </span><span className="mono" style={{ fontWeight: 700, fontSize: 13 }}>{e.avgEdge != null ? e.avgEdge.toFixed(1) : "—"}</span></div>
-                ))}
-              </div>
-            </div>
-            <div style={{ background: C.bg, borderRadius: 10, padding: 14, marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>Avg P&L by Exit Type</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {edgeByExit.map(e => (
-                  <div key={e.label}><span style={{ fontSize: 11, color: C.textMuted }}>{e.label}: </span><span className="mono" style={{ fontWeight: 700, fontSize: 13, color: e.avgPnl == null ? C.text : e.avgPnl >= 0 ? C.accent : C.red }}>{e.avgPnl != null ? fmt$(e.avgPnl) : "—"}</span></div>
-                ))}
-              </div>
-            </div>
-            {severeCombos.length > 0 && (
-              <div style={{ background: C.redDim, border: `1px solid ${C.red}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 8, fontSize: 12, color: C.red }}>
-                <b>⚠ Severe Combo Impact</b><div style={{ marginTop: 2 }}>{severeFreqPct.toFixed(0)}% frequency across logged trades</div>
+
+          {/* Outcome Neutral vs Attached */}
+          <Card>
+            <SectionLabel>Avg P&L: Outcome Neutral vs Attached</SectionLabel>
+            <GridBarChart data={neutralBars} height={220} colorFn={(d) => d.value >= 0 ? C.accent : C.red} />
+          </Card>
+
+          {/* Emotion Statistics table */}
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "18px 20px 14px", fontWeight: 700, fontSize: 15 }}>Emotion Statistics</div>
+            {emotionStatRows.length === 0 ? <div style={{ padding: "0 20px 20px", color: C.textDim, fontSize: 13 }}>No moods logged yet.</div> : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+                  <thead>
+                    <tr>
+                      {["Emotion", "Modifier", "Trade Count", "Avg P&L", "Win Rate"].map((h, i) => (
+                        <th key={h} style={{ textAlign: i === 0 ? "left" : "right", padding: "10px 20px", fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emotionStatRows.map(m => (
+                      <tr key={m.label} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                        <td style={{ padding: "11px 20px", fontWeight: 700, color: moodColor(m.label) }}>{m.label}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right", color: m.modifier >= 0 ? C.accent : C.red }} className="mono">{m.modifier >= 0 ? "+" : ""}{m.modifier.toFixed(2)}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right" }}>{m.count}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right", color: m.avgPnl >= 0 ? C.accent : C.red }} className="mono">{fmt$(m.avgPnl)}</td>
+                        <td style={{ padding: "11px 20px", textAlign: "right" }}>{m.winRate.toFixed(0)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-            <div style={{ background: plannedRate >= 60 ? C.accentDim : C.yellowDim, border: `1px solid ${(plannedRate >= 60 ? C.accent : C.yellow)}40`, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: plannedRate >= 60 ? C.accent : C.yellow }}>
-              {plannedRate >= 60 ? "Strong discipline" : "Needs improvement"}: {plannedRate.toFixed(0)}% planned exits
-            </div>
-          </div>
+          </Card>
         </div>
-      </Card>
+      )}
 
-      {/* Emotional Stability Score */}
-      <Card>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Emotional Stability Score</div>
-        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 24, alignItems: "start" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-              <span className="mono" style={{ fontSize: 40, fontWeight: 800, color: stabilityTier.color }}>{Math.max(0, stabilityScore)}</span>
-              <span style={{ fontSize: 18, color: C.textDim }}>%</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, marginBottom: 8 }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: stabilityTier.color }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: stabilityTier.color }}>{stabilityTier.label}</span>
-            </div>
-            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6, marginBottom: 14 }}>
-              {stabilityScore >= 80 ? "Your mindset is highly consistent trade to trade." : stabilityScore >= 60 ? "Your emotional state is largely stable across trades." : stabilityScore >= 35 ? "Emotional patterns are forming. Continued consistency will improve execution stability." : "Your emotional state changes frequently between trades. This tends to hurt execution consistency."}
-            </div>
-            <GradientZoneBar value={Math.max(0, Math.min(100, stabilityScore))} max={100} zones={stabilityZones} height={16} />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9, color: C.textDim }}>
-              <span>Reactive</span><span>Developing</span><span>Stable</span><span>Elite</span>
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Emotional Behavior Breakdown</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Trades Analyzed</div><div className="mono" style={{ fontSize: 20, fontWeight: 800 }}>{filtered.length}</div></div>
-              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Emotion Shift Rate</div><div className="mono" style={{ fontSize: 20, fontWeight: 800 }}>{shiftRate.toFixed(0)}%</div></div>
-              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Longest Focus Streak</div><div className="mono" style={{ fontSize: 20, fontWeight: 800 }}>{longestStreak}</div></div>
-              <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}><div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>Most Frequent Shift</div><div style={{ fontSize: 15, fontWeight: 800 }}>{freqShift ? freqShift.key : "—"}</div></div>
-            </div>
-            <div style={{ background: C.bg, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: C.textMuted, marginBottom: 10 }}>
-              {shiftRate < 30 ? "Low variability. Your emotional state is carrying over well between trades." : shiftRate < 55 ? "Moderate variability. Reinforcing a dominant emotional state may improve consistency." : "High variability. Your emotional state resets often — a short pre-trade routine may help anchor it."}
-            </div>
-            <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.6 }}>What this measures: tracks how often your emotional state changes between trades. Higher stability typically leads to more consistent execution.</div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Top 3 Recommendations */}
-      <Card>
-        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Top {recommendations.length} Recommendation{recommendations.length !== 1 ? "s" : ""}</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {recommendations.map((r, i) => (
-            <div key={r.id} style={{ background: C.bg, borderRadius: 12, padding: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: C.textDim }}>#{i + 1}</span>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{r.title}</span>
-                <Badge color={sevColor(r.severity)}>{r.severity}</Badge>
-              </div>
-              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12, lineHeight: 1.6 }}>{r.text}</div>
-              {openRec === r.id && <div style={{ fontSize: 12, color: C.textDim, background: C.surfaceHigh, borderRadius: 8, padding: 12, marginBottom: 12, lineHeight: 1.6 }}>{r.detail}</div>}
-              <div style={{ display: "flex", gap: 8 }}>
-                <Btn small variant="ghost" onClick={() => setOpenRec(o => o === r.id ? null : r.id)}>{openRec === r.id ? "▴ Hide" : "▾ View Experiment"}</Btn>
-                <Btn small variant={startedRecs[r.id] ? "success" : "primary"} onClick={() => setStartedRecs(s => ({ ...s, [r.id]: !s[r.id] }))}>{startedRecs[r.id] ? "✓ Started" : "▷ Start"}</Btn>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Daily Edge Score */}
-      <Card>
-        <SectionLabel>Daily Edge Score (Last 30 Days)</SectionLabel>
-        <EdgeLineChart data={dailyEdgeData} height={260} />
-      </Card>
-
-      {/* Avg P&L by Emotion + Win Rate by Emotion */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Card>
-          <SectionLabel>Average P&L by Emotion</SectionLabel>
-          <GridBarChart data={avgPnlByMood} height={260} colorFn={(d) => moodColor(d.label)} />
-        </Card>
-        <Card>
-          <SectionLabel>Win Rate by Emotion (%)</SectionLabel>
-          <GridBarChart data={winRateByMood} height={260} colorFn={() => C.blue} yMin={0} yMax={100} axisFormat={v => `${Math.round(v)}%`} tooltipFormat={v => `${Math.round(v)}%`} />
-        </Card>
-      </div>
-
-      {/* Outcome Neutral vs Attached */}
-      <Card>
-        <SectionLabel>Avg P&L: Outcome Neutral vs Attached</SectionLabel>
-        <GridBarChart data={neutralBars} height={220} colorFn={(d) => d.value >= 0 ? C.accent : C.red} />
-      </Card>
-
-      {/* Emotion Statistics table */}
-      <Card style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "18px 20px 14px", fontWeight: 700, fontSize: 15 }}>Emotion Statistics</div>
-        {emotionStatRows.length === 0 ? <div style={{ padding: "0 20px 20px", color: C.textDim, fontSize: 13 }}>No moods logged yet.</div> : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
-              <thead>
-                <tr>
-                  {["Emotion", "Modifier", "Trade Count", "Avg P&L", "Win Rate"].map((h, i) => (
-                    <th key={h} style={{ textAlign: i === 0 ? "left" : "right", padding: "10px 20px", fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {emotionStatRows.map(m => (
-                  <tr key={m.label} style={{ borderBottom: `1px solid ${C.border}20` }}>
-                    <td style={{ padding: "11px 20px", fontWeight: 700, color: moodColor(m.label) }}>{m.label}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right", color: m.modifier >= 0 ? C.accent : C.red }} className="mono">{m.modifier >= 0 ? "+" : ""}{m.modifier.toFixed(2)}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right" }}>{m.count}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right", color: m.avgPnl >= 0 ? C.accent : C.red }} className="mono">{fmt$(m.avgPnl)}</td>
-                    <td style={{ padding: "11px 20px", textAlign: "right" }}>{m.winRate.toFixed(0)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      <Btn variant="ghost" onClick={() => setPage && setPage("journal")} style={{ alignSelf: "flex-start" }}>← Review trades in Trades</Btn>
+      <Btn variant="ghost" onClick={() => setPage && setPage("journal")} style={{ marginTop: 18 }}>← Review trades in Trades</Btn>
     </div>
   );
 }
@@ -7649,15 +7683,12 @@ function Finances({ state, dispatch }) {
   const [tab, setTab] = useState("pnl");
   const TABS = [["pnl", "⚖ P&L"], ["expenses", "$ Expenses"], ["payouts", "⊙ Payouts"], ["lost", "⊘ Lost"]];
   return (
-    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 20 }}>
-      <div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> Prop Firms</h1>
-        <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Track expenses, payouts, and profit from your prop firms</div>
-      </div>
-      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Prop Firms" subtitle="Track expenses, payouts, and profit from your prop firms." />
+      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, width: "fit-content", flexWrap: "wrap", marginBottom: 20 }}>
         {TABS.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ padding: "9px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
-            background: tab === id ? `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)` : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
+          <button key={id} onClick={() => setTab(id)} style={{ padding: "9px 18px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+            background: tab === id ? C.accent : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
         ))}
       </div>
       {tab === "pnl" && <PnLTab state={state} dispatch={dispatch} />}
@@ -8224,25 +8255,21 @@ function LiveCapital({ state, dispatch, setPage }) {
   const snoozeAlert = (id) => setDismissed(d => ({ ...d, [id]: Date.now() + 3 * 24 * 60 * 60 * 1000 }));
   const TABS = [["overview", "Overview"], ["setup", "Setup & Automation"], ["transactions", "Transactions"]];
   return (
-    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 260 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, display: "flex", alignItems: "center", gap: 8, color: C.accent }}><span>✓</span> Live Capital</h1>
-          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>Track live capital, drawdown, risk buffer, and account growth.</div>
-        </div>
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Live Capital" subtitle="Track live capital, drawdown, risk buffer, and account growth." actions={
         <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative" }}>
           <Badge color={C.blue}>Live Account</Badge>
           {pendingCount > 0 && <Badge color={C.purple}>{pendingCount} Pending</Badge>}
-          <button onClick={() => setAlertsOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 7, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 12, fontWeight: 700, padding: "8px 14px", cursor: "pointer" }}>
+          <button onClick={() => setAlertsOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 7, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 999, color: C.text, fontSize: 12, fontWeight: 700, padding: "8px 14px", cursor: "pointer" }}>
             🔔 {activeAlertCount} Alert{activeAlertCount !== 1 ? "s" : ""}
           </button>
           {alertsOpen && <CapitalAlertsPanel state={state} onClose={() => setAlertsOpen(false)} dismissed={dismissed} onDismiss={dismissAlert} onSnooze={snoozeAlert} />}
         </div>
-      </div>
+      } />
 
-      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, width: "fit-content", flexWrap: "wrap", marginBottom: 20 }}>
         {TABS.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ padding: "9px 18px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: tab === id ? `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)` : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
+          <button key={id} onClick={() => setTab(id)} style={{ padding: "9px 18px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, background: tab === id ? C.accent : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
         ))}
       </div>
 
@@ -8404,10 +8431,20 @@ function Settings({ state, dispatch }) {
     else notify("Supported formats: JSON, CSV");
   };
 
-  return (
-    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 22 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, color: C.accent }}>✓ Settings</h1>
+  const [tab, setTab] = useState("profile");
+  const SETTINGS_TABS = [["profile", "Profile"], ["trading", "Trading Setup"], ["appearance", "Appearance"], ["data", "Privacy & Data"]];
 
+  return (
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Settings" />
+      <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, marginBottom: 22, maxWidth: 560, flexWrap: "wrap" }}>
+        {SETTINGS_TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "9px 14px", borderRadius: 999, border: "none", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", background: tab === id ? C.accent : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+
+      {tab === "profile" && (<>
       {/* Plan / Billing */}
       <Card style={{ background: isPlus(state) ? `linear-gradient(160deg, ${C.blue}14, ${C.purple}14)` : C.surface, borderColor: isPlus(state) ? C.purple + "55" : C.border }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
@@ -8453,6 +8490,9 @@ function Settings({ state, dispatch }) {
         </div>
       </Card>
 
+      </>)}
+
+      {tab === "trading" && (<>
       {/* Accounts */}
       <Card>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
@@ -8547,6 +8587,9 @@ function Settings({ state, dispatch }) {
         )}
       </Card>
 
+      </>)}
+
+      {tab === "appearance" && (<>
       {/* Appearance */}
       <Card>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
@@ -8651,6 +8694,9 @@ function Settings({ state, dispatch }) {
         </div>
       </Card>
 
+      </>)}
+
+      {tab === "data" && (<>
       {/* Privacy & Screen Protection */}
       <Card style={{ borderColor: state.privacy?.enabled ? C.purple + "55" : C.border }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 4, gap: 10 }}>
@@ -8691,6 +8737,9 @@ function Settings({ state, dispatch }) {
         )}
       </Card>
 
+      </>)}
+
+      {tab === "trading" && (<>
       {/* Pre-Session Ritual */}
       <Card>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 4, gap: 10 }}>
@@ -8756,6 +8805,9 @@ function Settings({ state, dispatch }) {
         )}
       </Card>
 
+      </>)}
+
+      {tab === "data" && (<>
       {/* Data Export */}
       <Card>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
@@ -8824,6 +8876,10 @@ function Settings({ state, dispatch }) {
           <Btn variant="danger" onClick={() => setClearAllConfirm(true)}>🗑 Clear All Data</Btn>
         )}
       </Card>
+
+      </>)}
+
+      </div>
 
       {/* Toast (replaces alert(), which is also blocked in this sandbox) */}
       {toast && (
