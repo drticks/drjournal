@@ -236,6 +236,27 @@ const InstagramIcon = ({ size = 14, color = "currentColor" }) => (
     <circle cx="17.4" cy="6.6" r="1.1" fill={color} stroke="none" />
   </svg>
 );
+
+// ── SIDEBAR NAV ICONS (inline SVG, one per page — not the same glyph reused) ──
+const NAV_ICON_PATHS = {
+  dashboard: <><rect x="3" y="3" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" /></>,
+  journal: <><path d="M6 2h9l3 3v17H6z" /><path d="M15 2v3h3" /><path d="M9 12h6M9 16h6M9 8h2" /></>,
+  preparation: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></>,
+  strategies: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z" /><path d="M4 19.5V6.5" /></>,
+  analytics: <><path d="M4 20V10M11 20V4M18 20v-7" /><path d="M2 20h20" /></>,
+  myrecord: <><path d="M8 21h8M12 17v4" /><path d="M7 4h10v5a5 5 0 0 1-10 0Z" /><path d="M7 5H4a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4M17 5h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4" /></>,
+  mynotes: <><path d="M4 4h13l3 3v13H4z" /><path d="M8 9h8M8 13h8M8 17h5" /></>,
+  emotions: <><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></>,
+  finances: <><path d="M4 21V9l8-6 8 6v12" /><path d="M9 21v-7h6v7" /></>,
+  livecapital: <><rect x="2" y="6" width="20" height="14" rx="2.5" /><path d="M2 10h20" /><circle cx="17" cy="15" r="1.4" fill="currentColor" stroke="none" /></>,
+  import: <><path d="M12 3v13" /><path d="m7 11 5 5 5-5" /><path d="M4 21h16" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z" /></>,
+};
+const NavIcon = ({ name, size = 16, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    {NAV_ICON_PATHS[name]}
+  </svg>
+);
 // Shared pill CTA for the "Contact Us" / "Follow on Instagram" links used in
 // the header, auth screen, and Settings — real <a> tags styled as buttons.
 const ContactCTA = ({ kind, style = {} }) => {
@@ -274,13 +295,13 @@ function PlanAnnouncementBanner() {
       display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
       flexWrap: "wrap", textAlign: "center", boxShadow: "0 2px 14px #0007",
     }}>
-      {/* <span style={{ fontSize: 15, flexShrink: 0 }}>✨</span> */}
+      <span style={{ fontSize: 15, flexShrink: 0 }}>✨</span>
       <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.2 }}>
-        JOURNAL · LEARN · DISCIPLINE · GROW: 
+        Allah says: 
       </span>
-      {/* <span style={{ fontSize: 12.5, fontWeight: 500, opacity: 0.95 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 500, opacity: 0.95 }}>
         "I am as My servant thinks of Me." (Hadith Qudsi).
-      </span> */}
+      </span>
     </div>
   );
 }
@@ -818,14 +839,23 @@ function reducer(state, action) {
 
 // ─── PRIMITIVE UI ─────────────────────────────────────────────────────────────
 const Btn = ({ children, onClick, variant = "primary", small, style = {}, disabled }) => {
-  const base = { display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "7px 16px" : "11px 22px", borderRadius: 10, fontSize: small ? 12 : 14, fontWeight: 700, border: "none", transition: "all 0.15s", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 };
+  const base = { display: "inline-flex", alignItems: "center", gap: 6, padding: small ? "7px 16px" : "11px 24px", borderRadius: 999, fontSize: small ? 12 : 14, fontWeight: 700, letterSpacing: 0.1, border: "none", transition: "all 0.15s", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 };
   if (variant === "tealOutline") {
     // Real :hover (glow + border brighten) needs an actual CSS class — inline
     // style always wins over a stylesheet's :hover, so border/background/color
     // for this variant live entirely in .btn-teal-outline (see buildGlobalCSS).
-    return <button onClick={disabled ? null : onClick} disabled={disabled} className="btn-teal-outline" style={{ display: base.display, alignItems: base.alignItems, gap: base.gap, padding: base.padding, borderRadius: base.borderRadius, fontSize: base.fontSize, fontWeight: base.fontWeight, cursor: base.cursor, opacity: base.opacity, transition: base.transition, fontFamily: "inherit", ...style }}>{children}</button>;
+    return <button onClick={disabled ? null : onClick} disabled={disabled} className="btn-teal-outline" style={{ display: base.display, alignItems: base.alignItems, gap: base.gap, padding: base.padding, borderRadius: base.borderRadius, fontSize: base.fontSize, fontWeight: base.fontWeight, letterSpacing: base.letterSpacing, cursor: base.cursor, opacity: base.opacity, transition: base.transition, fontFamily: "inherit", ...style }}>{children}</button>;
   }
-  const variants = { primary: { background: C.accent, color: "#000" }, gradient: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000" }, gradient2: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000" }, ghost: { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` }, danger: { background: C.redDim, color: C.red, border: `1px solid ${C.red}40` }, success: { background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40` }, warn: { background: C.yellowDim, color: C.yellow, border: `1px solid ${C.yellow}40` }, accent2: { background: C.accent2, color: "#000" } };
+  const variants = {
+    primary: { background: C.accent, color: "#000", boxShadow: `0 2px 14px ${C.accent}33` },
+    gradient: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000", boxShadow: `0 2px 14px ${C.accent}33` },
+    gradient2: { background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, color: "#000", boxShadow: `0 2px 14px ${C.accent}33` },
+    ghost: { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` },
+    danger: { background: C.redDim, color: C.red, border: `1px solid ${C.red}40` },
+    success: { background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40` },
+    warn: { background: C.yellowDim, color: C.yellow, border: `1px solid ${C.yellow}40` },
+    accent2: { background: C.accent2, color: "#000" },
+  };
   return <button onClick={disabled ? null : onClick} style={{ ...base, ...variants[variant], ...style }}>{children}</button>;
 };
 
@@ -848,9 +878,9 @@ const Sel = ({ label, value, onChange, options, style = {} }) => (
 );
 
 const Card = ({ children, style = {}, onClick }) => (
-  <div onClick={onClick} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22, transition: "border-color 0.15s", cursor: onClick ? "pointer" : "default", ...style }}
-    onMouseEnter={onClick ? e => e.currentTarget.style.borderColor = C.borderLight : null}
-    onMouseLeave={onClick ? e => e.currentTarget.style.borderColor = C.border : null}>
+  <div onClick={onClick} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 22, transition: "border-color 0.15s, box-shadow 0.15s", cursor: onClick ? "pointer" : "default", ...style }}
+    onMouseEnter={onClick ? e => { e.currentTarget.style.borderColor = C.accent + "66"; e.currentTarget.style.boxShadow = `0 0 0 1px ${C.accent}22`; } : null}
+    onMouseLeave={onClick ? e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; } : null}>
     {children}
   </div>
 );
@@ -881,7 +911,7 @@ const StatCard = ({ label, value, sub, color, style, icon, iconColor, tone = "ne
     <div style={{
       background: toneColor ? toneColor + "0c" : C.surface,
       border: `1px solid ${toneColor ? toneColor + "40" : C.border}`,
-      borderRadius: 16, padding: "18px 20px", transition: "border-color 0.15s",
+      borderRadius: 20, padding: "18px 20px", transition: "border-color 0.15s",
       ...style,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
@@ -922,7 +952,7 @@ const GLOW_ICONS = {
 function GlowStatCard({ icon, title, value, valueColor, subtitle, glow }) {
   return (
     <div style={{
-      background: C.surface, border: `1px solid ${glow}55`, borderRadius: 16, padding: 22,
+      background: C.surface, border: `1px solid ${glow}55`, borderRadius: 20, padding: 22,
       boxShadow: `0 0 0 1px ${glow}18, 0 10px 34px ${glow}12`,
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
@@ -936,7 +966,10 @@ function GlowStatCard({ icon, title, value, valueColor, subtitle, glow }) {
 }
 
 const SectionLabel = ({ children }) => (
-  <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}>{children}</div>
+  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}>
+    <span style={{ width: 10, height: 2, borderRadius: 2, background: C.accent, flexShrink: 0 }} />
+    {children}
+  </div>
 );
 
 // ─── BAR & LINE CHARTS ───────────────────────────────────────────────────────
@@ -1149,17 +1182,19 @@ function AuthScreen({ state, dispatch }) {
     }
   };
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 440 }} className="fade-in">
         <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <img src={logoUrl} alt="" style={{ width: 88, height: 88, borderRadius: 20, marginBottom: 14, objectFit: "cover" }} />
-          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -1, fontFamily: "'Inter', sans-serif", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
+          <div style={{ display: "inline-flex", padding: 5, borderRadius: 24, background: `linear-gradient(140deg, ${C.accent}55, transparent 60%)`, marginBottom: 16 }}>
+            <img src={logoUrl} alt="" style={{ width: 84, height: 84, borderRadius: 19, objectFit: "cover", display: "block" }} />
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1, fontFamily: "'Inter', sans-serif", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
           <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 4, textTransform: "uppercase", marginTop: 4 }}>Trading Journal</div>
         </div>
         <Card style={{ padding: 32 }}>
-          <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.bg, borderRadius: 10, padding: 4 }}>
+          <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.bg, borderRadius: 999, padding: 4, border: `1px solid ${C.border}` }}>
             {[["login", "Sign In"], ["register", "Create Account"]].map(([m, l]) => (
-              <button key={m} onClick={() => { if (m === "register") { setShowSignupNotice(true); return; } setMode(m); setError(""); }} style={{ flex: 1, padding: 8, borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: mode === m ? C.accent : "transparent", color: mode === m ? "#000" : C.textMuted }}>{l}</button>
+              <button key={m} onClick={() => { if (m === "register") { setShowSignupNotice(true); return; } setMode(m); setError(""); }} style={{ flex: 1, padding: 8, borderRadius: 999, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.15s", background: mode === m ? C.accent : "transparent", color: mode === m ? "#000" : C.textMuted }}>{l}</button>
             ))}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1558,11 +1593,19 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
     closeAccountMenu();
   };
 
+  const currentNavLabel = (NAV.find(n => n.id === page)?.label) || (page === "import" ? "Import Trades" : page === "settings" ? "Settings" : "");
+  const HeaderDivider = () => <div style={{ width: 1, alignSelf: "stretch", background: C.border, margin: "0 2px", flexShrink: 0 }} />;
+
   return (
     <div className="desktop-header" style={{
-      display: "flex", alignItems: "center", gap: 10, padding: "10px 20px",
+      display: "flex", alignItems: "center", gap: 10, padding: "12px 20px",
       borderBottom: `1px solid ${C.border}`, background: C.sidebar, flexShrink: 0, position: "relative", zIndex: 30,
+      boxShadow: `0 1px 0 ${C.accent}22`,
     }}>
+      {currentNavLabel && (
+        <div style={{ fontSize: 14, fontWeight: 800, color: C.text, whiteSpace: "nowrap", paddingRight: 4 }}>{currentNavLabel}</div>
+      )}
+      <HeaderDivider />
       <LiveSessionClock />
 
       <div style={{ flex: 1 }} />
@@ -1625,11 +1668,15 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
 
       <SyncBadge status={syncStatus} />
 
-      <button title="Settings" onClick={() => setPage("settings")} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.textMuted, width: 34, height: 34, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>⚙️</button>
+      <HeaderDivider />
+
+      <button title="Settings" onClick={() => setPage("settings")} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.textMuted, width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="settings" size={15} /></button>
 
       <ContactCTA kind="mail" style={{ background: "transparent", border: "none", color: C.textMuted, padding: "8px 6px", fontWeight: 600 }} />
 
       <ContactCTA kind="instagram" style={{ background: "transparent", border: "none", color: C.accent, padding: "8px 6px" }} />
+
+      <HeaderDivider />
 
       {/* Session control */}
       <div style={{ position: "relative" }}>
@@ -1660,42 +1707,87 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
 }
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-const NAV = [{ id: "dashboard", icon: "✓", label: "Dashboard" }, { id: "journal", icon: "✓", label: "Trades" }, { id: "preparation", icon: "🧘", label: "Preparation" }, { id: "strategies", icon: "✓", label: "Playbook" }, { id: "analytics", icon: "✓", label: "Analytics", plus: true }, { id: "myrecord", icon: "✓", label: "My Record", plus: true }, { id: "mynotes", icon: "✓", label: "My Notes", plus: true }, { id: "emotions", icon: "✓", label: "Edge Score", plus: true }, { id: "finances", icon: "✓", label: "Prop Firms", plus: true }, { id: "livecapital", icon: "✓", label: "Live Capital", plus: true }];
+const NAV = [
+  { id: "dashboard", icon: <NavIcon name="dashboard" />, label: "Dashboard" },
+  { id: "journal", icon: <NavIcon name="journal" />, label: "Trades" },
+  { id: "preparation", icon: <NavIcon name="preparation" />, label: "Preparation" },
+  { id: "strategies", icon: <NavIcon name="strategies" />, label: "Playbook" },
+  { id: "analytics", icon: <NavIcon name="analytics" />, label: "Analytics", plus: true },
+  { id: "myrecord", icon: <NavIcon name="myrecord" />, label: "My Record", plus: true },
+  { id: "mynotes", icon: <NavIcon name="mynotes" />, label: "My Notes", plus: true },
+  { id: "emotions", icon: <NavIcon name="emotions" />, label: "Edge Score", plus: true },
+  { id: "finances", icon: <NavIcon name="finances" />, label: "Prop Firms", plus: true },
+  { id: "livecapital", icon: <NavIcon name="livecapital" />, label: "Live Capital", plus: true },
+];
+
+// Nav items grouped into labeled sections for the redesigned sidebar.
+const NAV_GROUPS = [
+  { label: "Overview", ids: ["dashboard", "journal", "preparation"] },
+  { label: "Growth", ids: ["strategies", "analytics", "myrecord"] },
+  { label: "Journal Plus", ids: ["mynotes", "emotions", "finances", "livecapital"] },
+];
 
 function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
   const ritualDue = state.ritual?.enabled !== false && !state.ritualLog?.[ritualKeyFor(new Date())];
   const navItems = NAV.filter(n => n.id !== "preparation" || state.ritual?.enabled !== false);
+  const byId = Object.fromEntries(navItems.map(n => [n.id, n]));
+  const groups = NAV_GROUPS.map(g => ({ ...g, items: g.ids.map(id => byId[id]).filter(Boolean) })).filter(g => g.items.length);
+
+  const NavRow = (n) => (
+    <div key={n.id} onClick={() => { setPage(n.id); onClose && onClose(); }} style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 10, cursor: "pointer",
+      marginBottom: 2, position: "relative",
+      background: page === n.id ? C.accentDim : "transparent",
+      color: page === n.id ? C.accent : C.textMuted,
+      fontWeight: page === n.id ? 700 : 500, fontSize: 13.5,
+      boxShadow: page === n.id ? `inset 3px 0 0 ${C.accent}` : "inset 3px 0 0 transparent",
+      transition: "background 0.12s, color 0.12s",
+    }}
+      onMouseEnter={e => { if (page !== n.id) e.currentTarget.style.background = C.surfaceHigh; }}
+      onMouseLeave={e => { if (page !== n.id) e.currentTarget.style.background = "transparent"; }}>
+      <span style={{ width: 18, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: page === n.id ? 1 : 0.75 }}>{n.icon}</span>
+      <span style={{ flex: 1 }}>{n.label}</span>
+      {n.id === "preparation" && ritualDue && <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.red, flexShrink: 0, boxShadow: `0 0 6px ${C.red}` }} />}
+      {n.plus && !isPlus(state) && <PlusBadge small />}
+    </div>
+  );
+
   return (
     <>
       {mobileNavOpen && <div className="sidebar-scrim" onClick={onClose} />}
-      <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ width: 224, minWidth: 224, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", height: "100%" }}>
-        <div style={{ padding: "18px 16px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ width: 232, minWidth: 232, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", height: "100%" }}>
+        <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            <img src={logoUrl} alt="" style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, objectFit: "cover" }} />
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <img src={logoUrl} alt="" style={{ width: 42, height: 42, borderRadius: 11, objectFit: "cover", boxShadow: `0 0 0 1px ${C.border}, 0 0 14px ${C.accent}33` }} />
+            </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, fontFamily: "'Inter', sans-serif", letterSpacing: -0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
-              <div style={{ fontSize: 9, color: C.accent, letterSpacing: 3, textTransform: "uppercase", marginTop: 2, opacity: 0.85 }}>Trading Journal</div>
+              <div style={{ fontSize: 15, fontWeight: 800, fontFamily: "'Inter', sans-serif", letterSpacing: -0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
+              <div style={{ fontSize: 9, color: C.accent, letterSpacing: 2.5, textTransform: "uppercase", marginTop: 2, opacity: 0.8 }}>Trading Journal</div>
             </div>
           </div>
           <button onClick={onClose} className="sidebar-close-btn" style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer", display: "none" }}>×</button>
         </div>
-      <div style={{ padding: "10px 8px", flex: 1, overflowY: "auto" }}>
-        <div style={{ fontSize: 9, color: C.textDim, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", padding: "4px 8px 6px" }}>Menu</div>
-        {navItems.map(n => (
-          <div key={n.id} onClick={() => { setPage(n.id); onClose && onClose(); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, cursor: "pointer", marginBottom: 1, transition: "all 0.1s", background: page === n.id ? C.accentDim : "transparent", color: page === n.id ? C.accent : C.textMuted, fontWeight: page === n.id ? 600 : 400, fontSize: 14 }}>
-            <span style={{ fontSize: 14, width: 18, textAlign: "center" }}>{n.icon}</span>
-            <span style={{ flex: 1 }}>{n.label}</span>
-            {n.id === "preparation" && ritualDue && <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.red, flexShrink: 0 }} />}
-            {n.plus && !isPlus(state) && <PlusBadge small />}
+        <div style={{ padding: "12px 8px", flex: 1, overflowY: "auto" }}>
+          {groups.map((g, gi) => (
+            <div key={g.label} style={{ marginBottom: gi < groups.length - 1 ? 16 : 0 }}>
+              <div style={{ fontSize: 9, color: C.textDim, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", padding: "4px 10px 6px" }}>{g.label}</div>
+              {g.items.map(NavRow)}
+            </div>
+          ))}
+        </div>
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 10px" }}>
+          <Btn variant="tealOutline" onClick={() => openAddTrade(state, dispatch)} style={{ width: "100%", justifyContent: "center", fontSize: 13, marginBottom: 8, borderRadius: 10 }}>+ Add Trade</Btn>
+          <button onClick={() => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); onClose && onClose(); return; } setPage("import"); onClose && onClose(); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, border: "none", borderRadius: 10, color: "#000", fontSize: 12, fontWeight: 700, padding: 9, cursor: "pointer", marginBottom: 10, opacity: page === "import" ? 1 : 0.9, boxShadow: page === "import" ? `0 0 0 2px ${C.accent}55` : "none" }}>Import Trades {!isPlus(state) && <PlusBadge small />}</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 9px", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10 }}>
+            <span style={{ width: 24, height: 24, borderRadius: "50%", background: C.accentDim, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+              {(state.currentUser?.name || state.currentUser?.email || "?").charAt(0).toUpperCase()}
+            </span>
+            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{state.currentUser?.name || "Account"}</span>
+            <button title="Sign Out" onClick={async () => { await supabase.auth.signOut(); dispatch({ type: "LOGOUT" }); }} style={{ background: "none", border: "none", color: C.textDim, cursor: "pointer", fontSize: 13, display: "flex", padding: 2 }}>⏻</button>
           </div>
-        ))}
+        </div>
       </div>
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 8px" }}>
-        <Btn variant="tealOutline" onClick={() => openAddTrade(state, dispatch)} style={{ width: "100%", justifyContent: "center", fontSize: 13, marginBottom: 8 }}>+ Add Trade</Btn>
-        <button onClick={() => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); onClose && onClose(); return; } setPage("import"); onClose && onClose(); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, border: "none", borderRadius: 7, color: "#000", fontSize: 12, fontWeight: 700, padding: 8, cursor: "pointer", marginBottom: 8, opacity: page === "import" ? 1 : 0.9, boxShadow: page === "import" ? `0 0 0 2px ${C.accent}55` : "none" }}>Import Trades {!isPlus(state) && <PlusBadge small />}</button>
-        <button onClick={async () => { await supabase.auth.signOut(); dispatch({ type: "LOGOUT" }); }} style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 7, color: C.textMuted, fontSize: 12, padding: 7, cursor: "pointer" }}>Sign Out</button>
-      </div>
-    </div>
     </>
   );
 }
@@ -9037,6 +9129,16 @@ export default function App() {
   if (!state.currentUser) return (
     <>
       <style>{buildGlobalCSS()}</style>
+      <div style={{
+        position: "fixed", inset: 0, zIndex: -1, pointerEvents: "none", background: C.bg,
+        backgroundImage: `
+          radial-gradient(ellipse 900px 600px at -5% -10%, ${C.accent}14, transparent 60%),
+          radial-gradient(ellipse 700px 500px at 105% 105%, ${C.accent2}10, transparent 60%),
+          linear-gradient(${C.border}22 1px, transparent 1px),
+          linear-gradient(90deg, ${C.border}22 1px, transparent 1px)
+        `,
+        backgroundSize: "auto, auto, 42px 42px, 42px 42px",
+      }} />
       <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
         <PlanAnnouncementBanner />
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -9074,7 +9176,7 @@ export default function App() {
   };
 
   const watermark = state.watermark;
-  const currentNav = NAV.find(n => n.id === page) || (page === "import" ? { icon: "✓", label: "Import Trades" } : page === "settings" ? { icon: "✓", label: "Settings" } : null);
+  const currentNav = NAV.find(n => n.id === page) || (page === "import" ? { icon: <NavIcon name="import" />, label: "Import Trades" } : page === "settings" ? { icon: <NavIcon name="settings" />, label: "Settings" } : null);
   const watermarkMode = watermark?.mode || (watermark?.dataUrl ? "custom" : "spade");
   const watermarkImgSrc = watermarkMode === "logo" ? logoUrl : watermarkMode === "custom" ? watermark?.dataUrl : null;
 
@@ -9082,6 +9184,18 @@ export default function App() {
     <>
       <style>{buildGlobalCSS()}</style>
       <PrivacyGuard state={state} dispatch={dispatch}>
+      {/* Ambient background — soft neon glows in two corners + a faint grid,
+          sits behind the watermark and all page content. */}
+      <div style={{
+        position: "fixed", inset: 0, zIndex: -1, pointerEvents: "none", background: C.bg,
+        backgroundImage: `
+          radial-gradient(ellipse 900px 600px at -5% -10%, ${C.accent}14, transparent 60%),
+          radial-gradient(ellipse 700px 500px at 105% 105%, ${C.accent2}10, transparent 60%),
+          linear-gradient(${C.border}22 1px, transparent 1px),
+          linear-gradient(90deg, ${C.border}22 1px, transparent 1px)
+        `,
+        backgroundSize: "auto, auto, 42px 42px, 42px 42px",
+      }} />
       {watermarkImgSrc ? (
         <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: `url(${watermarkImgSrc})`, backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat", opacity: (watermark.opacity ?? 20) / 100, pointerEvents: "none" }} />
       ) : (
