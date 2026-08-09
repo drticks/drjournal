@@ -422,12 +422,17 @@ function UpgradeModal({ state, dispatch }) {
 
 function calcStats(trades) {
   if (!trades.length) return { netPnl: 0, winRate: 0, profitFactor: 0, avgWin: 0, avgLoss: 0, wins: 0, losses: 0, be: 0, totalWins: 0, totalLosses: 0, expectancy: 0, totalPips: 0 };
-  const wins = trades.filter(t => t.outcome === "Win" || (t.outcome !== "Loss" && t.outcome !== "BE" && t.pnl > 0));
-  const losses = trades.filter(t => t.outcome === "Loss" || (t.outcome !== "Win" && t.outcome !== "BE" && t.pnl < 0));
+  // Net = gross P&L minus fees/commissions/charges logged on the trade — this is
+  // what "Net P&L" should mean everywhere (dashboard, trades list, analytics).
+  // Previously this summed raw trade.pnl (gross), which double-counted as both
+  // "Gross" and "Net" and overstated results by the fee amount.
+  const netOf = (t) => t.pnl - (parseFloat(t.fees) || 0);
+  const wins = trades.filter(t => t.outcome === "Win" || (t.outcome !== "Loss" && t.outcome !== "BE" && netOf(t) > 0));
+  const losses = trades.filter(t => t.outcome === "Loss" || (t.outcome !== "Win" && t.outcome !== "BE" && netOf(t) < 0));
   const be = trades.filter(t => t.outcome === "BE");
-  const netPnl = trades.reduce((s, t) => s + t.pnl, 0);
-  const totalWins = wins.reduce((s, t) => s + t.pnl, 0);
-  const totalLosses = Math.abs(losses.reduce((s, t) => s + t.pnl, 0));
+  const netPnl = trades.reduce((s, t) => s + netOf(t), 0);
+  const totalWins = wins.reduce((s, t) => s + netOf(t), 0);
+  const totalLosses = Math.abs(losses.reduce((s, t) => s + netOf(t), 0));
   const avgWin = wins.length ? totalWins / wins.length : 0;
   const avgLoss = losses.length ? totalLosses / losses.length : 0;
   const profitFactor = totalLosses > 0 ? totalWins / totalLosses : wins.length > 0 ? 99 : 0;
@@ -449,7 +454,7 @@ function calcLiveCapitalStats(state) {
   const withdrawals = completed.filter(t => t.type === "Withdrawal").reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   const fees = completed.filter(t => t.type === "Fee").reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   const netContributions = deposits - withdrawals - fees;
-  const realizedTradingProfit = trades.reduce((s, t) => s + t.pnl, 0);
+  const realizedTradingProfit = trades.reduce((s, t) => s + (t.pnl - (parseFloat(t.fees) || 0)), 0);
   const startingCapital = lc.startingCapital || 0;
   const currentLiveCapital = startingCapital + netContributions + realizedTradingProfit;
   const netAccountChange = currentLiveCapital - startingCapital;
@@ -460,7 +465,7 @@ function calcLiveCapitalStats(state) {
   const events = [
     { date: lc.startingDate || "2026-01-01", delta: startingCapital, organicDelta: 0, type: "Starting Balance", note: "Starting live capital balance", account: "Live Account", amount: startingCapital },
     ...completed.map(t => ({ date: t.date, delta: t.type === "Withdrawal" || t.type === "Fee" ? -(parseFloat(t.amount) || 0) : (parseFloat(t.amount) || 0), organicDelta: 0, type: t.type, note: t.note, account: t.account || "Live Account", amount: parseFloat(t.amount) || 0 })),
-    ...trades.map(t => ({ date: t.date.slice(0, 10), delta: t.pnl, organicDelta: t.pnl, type: "Trade", note: `${t.symbol} ${t.direction}`, account: "Trading", amount: t.pnl })),
+    ...trades.map(t => { const net = t.pnl - (parseFloat(t.fees) || 0); return { date: t.date.slice(0, 10), delta: net, organicDelta: net, type: "Trade", note: `${t.symbol} ${t.direction}`, account: "Trading", amount: net }; }),
   ].sort((a, b) => new Date(a.date) - new Date(b.date));
   let running = 0, organicRunning = startingCapital, peak = 0, maxDD = 0;
   const curvePoints = [];
@@ -476,10 +481,10 @@ function calcLiveCapitalStats(state) {
 
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10);
-  const todayPnl = trades.filter(t => t.date.slice(0, 10) === todayKey).reduce((s, t) => s + t.pnl, 0);
+  const todayPnl = trades.filter(t => t.date.slice(0, 10) === todayKey).reduce((s, t) => s + (t.pnl - (parseFloat(t.fees) || 0)), 0);
   const dailyLossUsedPct = lc.dailyLossLimit ? Math.min(100, Math.max(0, (-todayPnl / lc.dailyLossLimit) * 100)) : 0;
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay());
-  const weekPnl = trades.filter(t => new Date(t.date) >= weekStart).reduce((s, t) => s + t.pnl, 0);
+  const weekPnl = trades.filter(t => new Date(t.date) >= weekStart).reduce((s, t) => s + (t.pnl - (parseFloat(t.fees) || 0)), 0);
   const weeklyLossUsedPct = lc.weeklyLossLimit ? Math.min(100, Math.max(0, (-weekPnl / lc.weeklyLossLimit) * 100)) : 0;
   const recoveryRequiredPct = running > 0 && currentDrawdownDollar > 0 ? (currentDrawdownDollar / running) * 100 : 0;
   const ddRatio = maxDrawdownLimit ? maxDD / maxDrawdownLimit : 0;
@@ -512,7 +517,7 @@ function buildLiveCapitalMonthly(state) {
   const trades = (state.trades || []).filter(t => linkedAccount === "all" || t.account === linkedAccount);
   const monthMap = {};
   const ensure = k => (monthMap[k] = monthMap[k] || { tradingPnl: 0, contributions: 0, withdrawals: 0 });
-  trades.forEach(t => { ensure(monthKey(t.date)).tradingPnl += t.pnl; });
+  trades.forEach(t => { ensure(monthKey(t.date)).tradingPnl += (t.pnl - (parseFloat(t.fees) || 0)); });
   txs.forEach(t => {
     const bucket = ensure(monthKey(t.date));
     if (t.type === "Deposit") bucket.contributions += parseFloat(t.amount) || 0;
@@ -1036,7 +1041,7 @@ function EquityCurveChart({ trades, height = 300 }) {
   });
   const sorted = [...rangeFiltered].sort((a, b) => new Date(a.date) - new Date(b.date));
   let cum = 0;
-  const pts = sorted.map(t => { cum += t.pnl; return { date: t.date, value: cum }; });
+  const pts = sorted.map(t => { cum += t.pnl - (parseFloat(t.fees) || 0); return { date: t.date, value: cum }; });
 
   const Header = () => (
     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
@@ -3629,7 +3634,7 @@ function Dashboard({ state, dispatch, setPage }) {
   // ── extra derived metrics for the redesigned dashboard ──
   const avgTrade = filtered.length ? stats.netPnl / filtered.length : 0;
   const dayPnlMap = {};
-  filtered.forEach(t => { const k = t.date.slice(0, 10); dayPnlMap[k] = (dayPnlMap[k] || 0) + t.pnl; });
+  filtered.forEach(t => { const k = t.date.slice(0, 10); dayPnlMap[k] = (dayPnlMap[k] || 0) + (t.pnl - (parseFloat(t.fees) || 0)); });
   const tradingDayCount = Object.keys(dayPnlMap).length;
   const winningDayCount = Object.values(dayPnlMap).filter(v => v > 0).length;
   const dayWinPct = tradingDayCount ? (winningDayCount / tradingDayCount) * 100 : 0;
@@ -4242,7 +4247,7 @@ function ImportReview({ review, accounts, onCancel, onConfirm }) {
   const toggle = (id) => setSelected(s => { const next = new Set(s); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(trades.map(t => t.id)));
   const selectedTrades = trades.filter(t => selected.has(t.id));
-  const netPnl = selectedTrades.reduce((s, t) => s + t.pnl, 0);
+  const netPnl = selectedTrades.reduce((s, t) => s + (t.pnl - (parseFloat(t.fees) || 0)), 0);
 
   return (
     <div className="fade-in" style={{ maxWidth: 1000, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -5155,7 +5160,7 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 10 }}>
               <span style={{ color: C.textMuted }}>Net P&L</span>
-              <span><b style={{ color: col }}>{fmt$(trade.pnl)}</b> <span style={{ color: C.textDim, fontSize: 11 }}>avg {fmt$(poolStats.netPnl / (pool.length || 1))}</span></span>
+              <span><b style={{ color: col }}>{fmt$(netPnl)}</b> <span style={{ color: C.textDim, fontSize: 11 }}>avg {fmt$(poolStats.netPnl / (pool.length || 1))}</span></span>
             </div>
             {mins != null && avgMins != null && (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 14 }}>
@@ -6407,13 +6412,13 @@ function Analytics({ state }) {
 
   // Daily P&L (last 14 active trading days)
   const dayMap = {};
-  filtered.forEach(t => { const k = new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }); dayMap[k] = (dayMap[k] || 0) + t.pnl; });
+  filtered.forEach(t => { const k = new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }); dayMap[k] = (dayMap[k] || 0) + (t.pnl - (parseFloat(t.fees) || 0)); });
   const dailyData = Object.entries(dayMap).map(([label, value]) => ({ label, value, _d: new Date(filtered.find(t => new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) === label)?.date) }))
     .sort((a, b) => a._d - b._d).slice(-14).map(({ label, value }) => ({ label, value }));
 
   // Day win %
   const dayPnlMap = {};
-  filtered.forEach(t => { const k = t.date.slice(0, 10); dayPnlMap[k] = (dayPnlMap[k] || 0) + t.pnl; });
+  filtered.forEach(t => { const k = t.date.slice(0, 10); dayPnlMap[k] = (dayPnlMap[k] || 0) + (t.pnl - (parseFloat(t.fees) || 0)); });
   const tradingDayCount = Object.keys(dayPnlMap).length;
   const winningDays = Object.values(dayPnlMap).filter(v => v > 0).length;
   const dayWinPct = tradingDayCount ? (winningDays / tradingDayCount) * 100 : 0;
@@ -6423,9 +6428,9 @@ function Analytics({ state }) {
   const setupNames = [...new Set(filtered.map(t => t.setup).filter(Boolean))];
   const setupData = setupNames.map(s => {
     const st = filtered.filter(t => t.setup === s);
-    const w = st.filter(t => t.outcome === "Win" || (t.outcome !== "Loss" && t.outcome !== "BE" && t.pnl > 0));
-    const l = st.filter(t => t.outcome === "Loss" || (t.outcome !== "Win" && t.outcome !== "BE" && t.pnl < 0));
-    const val = setupView === "Wins" ? w.reduce((a, t) => a + t.pnl, 0) : setupView === "Losses" ? Math.abs(l.reduce((a, t) => a + t.pnl, 0)) : calcStats(st).netPnl;
+    const w = st.filter(t => t.outcome === "Win" || (t.outcome !== "Loss" && t.outcome !== "BE" && (t.pnl - (parseFloat(t.fees) || 0)) > 0));
+    const l = st.filter(t => t.outcome === "Loss" || (t.outcome !== "Win" && t.outcome !== "BE" && (t.pnl - (parseFloat(t.fees) || 0)) < 0));
+    const val = setupView === "Wins" ? w.reduce((a, t) => a + (t.pnl - (parseFloat(t.fees) || 0)), 0) : setupView === "Losses" ? Math.abs(l.reduce((a, t) => a + (t.pnl - (parseFloat(t.fees) || 0)), 0)) : calcStats(st).netPnl;
     return { label: s, value: val };
   }).sort((a, b) => b.value - a.value);
 
