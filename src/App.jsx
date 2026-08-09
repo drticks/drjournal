@@ -3691,25 +3691,25 @@ function Dashboard({ state, dispatch, setPage }) {
           </div>
           <div style={{ fontSize: 15, color: C.textMuted, marginTop: 4 }}>Your trading performance at a glance</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5 }}>
           {[["7d", "7D"], ["30d", "30D"], ["90d", "90D"], ["all", "All"]].map(([v, l]) => {
             const active = filter === v;
             return (
               <button key={v} onClick={() => { setFilter(v); setRangeOpen(false); }} style={{
-                padding: "11px 20px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${active ? "transparent" : C.border}`,
-                background: active ? "linear-gradient(135deg, #fdfaf4, #f3e9e0)" : C.surfaceHigh,
-                color: active ? "#161a22" : C.text,
+                padding: "9px 18px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                border: "none",
+                background: active ? C.accent : "transparent",
+                color: active ? "#000" : C.textMuted,
               }}>{l}</button>
             );
           })}
           <div style={{ position: "relative" }}>
             <button onClick={() => setRangeOpen(o => !o)} style={{
-              display: "flex", alignItems: "center", gap: 9, padding: "11px 22px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", border: "1px solid transparent",
-              background: filter === "custom" ? "linear-gradient(135deg, #fdfaf4, #f3e9e0)" : "linear-gradient(135deg, #fdfaf4, #f3e9e0)",
-              color: "#161a22", whiteSpace: "nowrap",
+              display: "flex", alignItems: "center", gap: 8, padding: "9px 18px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none",
+              background: filter === "custom" ? C.accent : "transparent",
+              color: filter === "custom" ? "#000" : C.textMuted, whiteSpace: "nowrap",
             }}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#161a22" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="3" /><path d="M3 10h18" /><path d="M8 2v4" /><path d="M16 2v4" /></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="3" /><path d="M3 10h18" /><path d="M8 2v4" /><path d="M16 2v4" /></svg>
               {filter === "custom" && customRange.from && customRange.to ? `${customRange.from} – ${customRange.to}` : "Date range"}
             </button>
             {rangeOpen && (
@@ -3725,8 +3725,8 @@ function Dashboard({ state, dispatch, setPage }) {
               </>
             )}
           </div>
-          <Btn variant="tealOutline" onClick={() => openAddTrade(state, dispatch)} style={{ padding: "11px 24px", fontSize: 14 }}>+ Add Trade</Btn>
         </div>
+        <Btn variant="tealOutline" onClick={() => openAddTrade(state, dispatch)} style={{ padding: "11px 24px", fontSize: 14 }}>+ Add Trade</Btn>
       </div>
       {/* Account filter chips */}
       {activeAccount === "all" && (
@@ -3745,71 +3745,86 @@ function Dashboard({ state, dispatch, setPage }) {
         </div>
       )}
 
-      {/* Row 1 — headline metrics */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-        <StatCard label="Net P&L" value={fmt$(stats.netPnl)} color={stats.netPnl >= 0 ? C.accent : C.red} sub={`${filtered.length} trades`} icon="$" iconColor={C.accent} />
-        <StatCard label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} sub={`${stats.wins}W · ${stats.losses}L · ${stats.be}BE`} icon="◎" iconColor={C.accent} />
-        <StatCard label="Profit Factor" value={stats.profitFactor >= 99 ? "∞" : stats.profitFactor.toFixed(2)} sub={`Expectancy ${fmt$(stats.expectancy)}`} icon="⟐" iconColor={C.accent} />
-        <StatCard label="Avg Trade" value={fmt$(avgTrade)} color={avgTrade >= 0 ? C.accent : C.red} icon="📈" iconColor={C.blue} />
-      </div>
-
-      {/* Row 2 — secondary metrics incl. win/loss distribution + pips */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-        <StatCard label="Total Trades" value={filtered.length} sub="logged trades" />
-        <StatCard label="Day Win %" value={`${dayWinPct.toFixed(1)}%`} sub={`${winningDayCount}/${tradingDayCount} trading days`} />
-        <Card>
-          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 }}>Win/Loss Distribution</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 64, minWidth: 64, flexShrink: 0, overflow: "hidden" }}><DonutChart segments={[{ label: "Wins", value: stats.wins, color: C.accent }, { label: "Losses", value: stats.losses, color: C.red }]} size={64} thickness={11} showLegend={false} /></div>
-            <div>
-              <div className="mono" style={{ fontSize: 15, fontWeight: 800 }}><span style={{ color: C.accent }}>{stats.wins}</span> <span style={{ color: C.textDim, fontWeight: 600, fontSize: 11 }}>Wins</span></div>
-              <div className="mono" style={{ fontSize: 15, fontWeight: 800 }}><span style={{ color: C.red }}>{stats.losses}</span> <span style={{ color: C.textDim, fontWeight: 600, fontSize: 11 }}>Losses</span></div>
-            </div>
+      {/* Hero row — big featured Net P&L card + Win/Loss breakdown, asymmetric 1.6:1 split */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16, alignItems: "stretch" }}>
+        <Card style={{ background: `linear-gradient(135deg, ${(stats.netPnl >= 0 ? C.accent : C.red)}12, transparent 65%)`, border: `1px solid ${(stats.netPnl >= 0 ? C.accent : C.red)}40`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5 }}>Net P&amp;L · {filtered.length} trades</div>
+            <Badge color={streak >= 3 ? C.accent : C.textMuted}>{streak > 0 ? `🔥 ${streak} win streak` : "No active streak"}</Badge>
+          </div>
+          <div className="mono" style={{ fontSize: 54, fontWeight: 800, color: stats.netPnl >= 0 ? C.accent : C.red, letterSpacing: -2, margin: "10px 0" }}>{fmt$(stats.netPnl)}</div>
+          <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+            <div><div style={{ fontSize: 10.5, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Win Rate</div><div className="mono" style={{ fontSize: 19, fontWeight: 800, marginTop: 3 }}>{stats.winRate.toFixed(1)}%</div></div>
+            <div><div style={{ fontSize: 10.5, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Profit Factor</div><div className="mono" style={{ fontSize: 19, fontWeight: 800, marginTop: 3 }}>{stats.profitFactor >= 99 ? "∞" : stats.profitFactor.toFixed(2)}</div></div>
+            <div><div style={{ fontSize: 10.5, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Expectancy</div><div className="mono" style={{ fontSize: 19, fontWeight: 800, marginTop: 3 }}>{fmt$(stats.expectancy)}</div></div>
+            <div><div style={{ fontSize: 10.5, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Avg Trade</div><div className="mono" style={{ fontSize: 19, fontWeight: 800, marginTop: 3, color: avgTrade >= 0 ? C.accent : C.red }}>{fmt$(avgTrade)}</div></div>
           </div>
         </Card>
         <Card>
-          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Avg Win/Loss Ratio</div>
-          <div className="mono" style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>{avgWLRatio >= 99 ? "∞" : avgWLRatio.toFixed(2)}</div>
-          <div style={{ height: 6, borderRadius: 3, overflow: "hidden", display: "flex", background: C.border }}>
+          <SectionLabel>Win / Loss</SectionLabel>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ width: 72, minWidth: 72, flexShrink: 0 }}><DonutChart segments={[{ label: "Wins", value: stats.wins, color: C.accent }, { label: "Losses", value: stats.losses, color: C.red }]} size={72} thickness={12} showLegend={false} /></div>
+            <div>
+              <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}><span style={{ color: C.accent }}>{stats.wins}</span> <span style={{ color: C.textDim, fontWeight: 600, fontSize: 11 }}>Wins</span></div>
+              <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}><span style={{ color: C.red }}>{stats.losses}</span> <span style={{ color: C.textDim, fontWeight: 600, fontSize: 11 }}>Losses</span></div>
+              <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: C.textMuted }}>{stats.be} BE</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 16, height: 6, borderRadius: 3, overflow: "hidden", display: "flex", background: C.border }}>
             <div style={{ width: `${Math.min(100, (stats.avgWin / (stats.avgWin + stats.avgLoss || 1)) * 100)}%`, background: C.accent }} />
             <div style={{ flex: 1, background: C.red }} />
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.textDim, marginTop: 6 }}><span>{fmt$(stats.avgWin)}</span><span>{fmt$(-stats.avgLoss)}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.textDim, marginTop: 6 }}><span>Avg win {fmt$(stats.avgWin)}</span><span>Avg loss {fmt$(-stats.avgLoss)}</span></div>
         </Card>
       </div>
 
-      {/* Row 3 — pips, avg winner/loser, win streak */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-        <StatCard label="Avg Winner" value={fmt$(stats.avgWin)} color={C.accent} />
-        <StatCard label="Avg Loser" value={fmt$(stats.avgLoss)} color={C.red} />
-        <StatCard label="Total Pips" value={`${stats.totalPips >= 0 ? "+" : ""}${stats.totalPips.toFixed(1)}`} color={stats.totalPips >= 0 ? C.accent : C.red} sub="pips gained/lost" />
-        <StatCard label="Win Streak" value={streak} sub="consecutive wins" color={streak >= 3 ? C.accent : C.text} />
+      {/* Ticker strip — compact horizontally-scrolling secondary metrics instead of a stacked grid row */}
+      <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 2 }}>
+        {[
+          { label: "Total Trades", value: filtered.length },
+          { label: "Day Win %", value: `${dayWinPct.toFixed(1)}%` },
+          { label: "Avg Winner", value: fmt$(stats.avgWin), color: C.accent },
+          { label: "Avg Loser", value: fmt$(stats.avgLoss), color: C.red },
+          { label: "Total Pips", value: `${stats.totalPips >= 0 ? "+" : ""}${stats.totalPips.toFixed(1)}`, color: stats.totalPips >= 0 ? C.accent : C.red },
+          { label: "Avg W/L Ratio", value: avgWLRatio >= 99 ? "∞" : avgWLRatio.toFixed(2) },
+        ].map((s, i) => (
+          <div key={i} style={{ flexShrink: 0, minWidth: 148, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 16px" }}>
+            <div style={{ fontSize: 10.5, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{s.label}</div>
+            <div className="mono" style={{ fontSize: 19, fontWeight: 800, marginTop: 4, color: s.color || C.text }}>{s.value}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Row 3.5 — Behavioral snapshot */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-        <GlowStatCard icon="badge" glow={edgeZoneInfo.color} title="Behavioral Edge™" value={`${avgEdge.toFixed(2)} / 10`} subtitle={edgeZoneInfo.label} />
-        <GlowStatCard icon="pulse" glow={stabilityTier.color} title="Emotional Stability" value={`${stabilityScore}%`} subtitle={`${stabilityTier.label} · Shift Rate: ${moodShiftRate.toFixed(0)}%`} />
-        <GlowStatCard icon="target" glow={plannedExitPct >= 60 ? C.accent : C.yellow} title="Exit Discipline" value={`${plannedExitPct.toFixed(0)}%`} subtitle={`Late-Loss Rate: ${lateLossPct.toFixed(0)}%`} />
-        <GlowStatCard icon="brain" glow={moodMode ? moodColor(moodMode.value) : C.accent} title="Dominant Emotion" value={moodMode ? moodMode.value : "—"} subtitle={moodMode ? `Used in ${moodMode.count} trades (${moodModePct.toFixed(0)}%)` : "No moods logged yet"} />
+      {/* Behavioral insights */}
+      <div>
+        <SectionLabel>Behavioral Insights</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+          <GlowStatCard icon="badge" glow={edgeZoneInfo.color} title="Behavioral Edge™" value={`${avgEdge.toFixed(2)} / 10`} subtitle={edgeZoneInfo.label} />
+          <GlowStatCard icon="pulse" glow={stabilityTier.color} title="Emotional Stability" value={`${stabilityScore}%`} subtitle={`${stabilityTier.label} · Shift Rate: ${moodShiftRate.toFixed(0)}%`} />
+          <GlowStatCard icon="target" glow={plannedExitPct >= 60 ? C.accent : C.yellow} title="Exit Discipline" value={`${plannedExitPct.toFixed(0)}%`} subtitle={`Late-Loss Rate: ${lateLossPct.toFixed(0)}%`} />
+          <GlowStatCard icon="brain" glow={moodMode ? moodColor(moodMode.value) : C.accent} title="Dominant Emotion" value={moodMode ? moodMode.value : "—"} subtitle={moodMode ? `Used in ${moodMode.count} trades (${moodModePct.toFixed(0)}%)` : "No moods logged yet"} />
+        </div>
       </div>
 
-      {/* Row 4 — Trading Mastery Score / Daily P&L / Equity Curve */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr 1.2fr", gap: 16, alignItems: "stretch" }}>
-        <Card>
+      {/* Charts (2/3) + Mastery score sidebar (1/3) — split layout instead of a uniform 3-up row */}
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, alignItems: "start" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Card>
+            <SectionLabel>Equity Curve</SectionLabel>
+            <EquityCurveChart trades={accountTrades} height={230} />
+          </Card>
+          <Card>
+            <SectionLabel>Net Daily P&amp;L</SectionLabel>
+            <GridBarChart data={dailyBars} height={200} />
+          </Card>
+        </div>
+        <Card style={{ textAlign: "center" }}>
           <SectionLabel>Trading Mastery Score</SectionLabel>
-          <RadarChart axes={masteryAxes} size={260} />
-          <div style={{ textAlign: "center", marginTop: -6 }}>
+          <RadarChart axes={masteryAxes} size={210} />
+          <div style={{ marginTop: -4 }}>
             <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Your Score</div>
             <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: masteryScore >= 70 ? C.accent : masteryScore >= 45 ? C.yellow : C.red }}>{masteryScore}</div>
           </div>
-        </Card>
-        <Card>
-          <SectionLabel>Net Daily P&L</SectionLabel>
-          <GridBarChart data={dailyBars} height={260} />
-        </Card>
-        <Card>
-          <EquityCurveChart trades={accountTrades} height={280} />
         </Card>
       </div>
 
@@ -3902,19 +3917,28 @@ function Journal({ state, dispatch, setPage }) {
   );
   const td = (children, extra = {}) => <td style={{ padding: "11px 14px", fontSize: 13, whiteSpace: "nowrap", ...extra }}>{children}</td>;
 
+  const visStats = calcStats(visible);
+
   return (
-    <div className="fade-in" style={{ height: "100%", overflow: "hidden", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -1, flex: 1, color: C.accent }}>✓ Trades</h1>
+    <div className="fade-in" style={{ height: "100%", overflow: "hidden", padding: 28, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, flexShrink: 0 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: -1, color: C.accent, margin: 0 }}>Trades</h1>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{visible.length} trades · <span style={{ color: visStats.netPnl >= 0 ? C.accent : C.red, fontWeight: 700 }}>{visStats.netPnl >= 0 ? "+" : ""}${visStats.netPnl.toFixed(2)}</span> · {visStats.totalPips >= 0 ? "+" : ""}{visStats.totalPips.toFixed(1)} pips</div>
+        </div>
         <Btn small variant="gradient2" onClick={() => isPlus(state) ? (setPage && setPage("import")) : dispatch({ type: "OPEN_MODAL", modal: "upgrade" })}>Import Trades {!isPlus(state) && <PlusBadge small />}</Btn>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 12 }}>
         <div style={{ position: "relative" }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "8px 14px 8px 34px", fontSize: 13, outline: "none", width: 200 }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 999, color: C.text, padding: "8px 14px 8px 34px", fontSize: 13, outline: "none", width: 200 }} />
           <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: C.textDim }}>⌕</span>
         </div>
+        <div style={{ width: 1, alignSelf: "stretch", background: C.border }} />
         {["All", "Long", "Short"].map(d => <Btn key={d} small variant={filterDir === d ? "success" : "ghost"} onClick={() => setFilterDir(d)}>{d}</Btn>)}
+        <div style={{ width: 1, alignSelf: "stretch", background: C.border }} />
         {["All", "Win", "Loss", "BE"].map(o => <Btn key={o} small variant={filterOutcome === o ? (o === "Win" ? "success" : o === "Loss" ? "danger" : o === "BE" ? "warn" : "ghost") : "ghost"} onClick={() => setFilterOutcome(o)}>{o === "BE" ? "Breakeven" : o}</Btn>)}
       </div>
-      <div style={{ fontSize: 12, color: C.textMuted, flexShrink: 0 }}>{visible.length} trades · {calcStats(visible).netPnl >= 0 ? "+" : ""}${calcStats(visible).netPnl.toFixed(2)} · {calcStats(visible).totalPips >= 0 ? "+" : ""}{calcStats(visible).totalPips.toFixed(1)} pips</div>
       {visible.length === 0 && <div style={{ textAlign: "center", padding: 60, color: C.textDim }}>No trades found.</div>}
       {visible.length > 0 && (
         <Card style={{ padding: 0, overflow: "hidden", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
