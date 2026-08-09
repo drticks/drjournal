@@ -1185,11 +1185,9 @@ function AuthScreen({ state, dispatch }) {
     <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 440 }} className="fade-in">
         <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{ display: "inline-flex", padding: 5, borderRadius: 24, background: `linear-gradient(140deg, ${C.accent}55, transparent 60%)`, marginBottom: 16 }}>
-            <img src={logoUrl} alt="" style={{ width: 84, height: 84, borderRadius: 19, objectFit: "cover", display: "block" }} />
+          <div style={{ display: "inline-flex", padding: 6, borderRadius: 30, background: `linear-gradient(140deg, ${C.accent}55, transparent 60%)` }}>
+            <img src={logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 128, height: 128, borderRadius: 24, objectFit: "cover", display: "block" }} />
           </div>
-          <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1, fontFamily: "'Inter', sans-serif", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
-          <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 4, textTransform: "uppercase", marginTop: 4 }}>Trading Journal</div>
         </div>
         <Card style={{ padding: 32 }}>
           <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.bg, borderRadius: 999, padding: 4, border: `1px solid ${C.border}` }}>
@@ -1756,16 +1754,8 @@ function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
     <>
       {mobileNavOpen && <div className="sidebar-scrim" onClick={onClose} />}
       <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ width: 232, minWidth: 232, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", height: "100%" }}>
-        <div style={{ padding: "20px 16px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <img src={logoUrl} alt="" style={{ width: 42, height: 42, borderRadius: 11, objectFit: "cover", boxShadow: `0 0 0 1px ${C.border}, 0 0 14px ${C.accent}33` }} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, fontFamily: "'Inter', sans-serif", letterSpacing: -0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
-              <div style={{ fontSize: 9, color: C.accent, letterSpacing: 2.5, textTransform: "uppercase", marginTop: 2, opacity: 0.8 }}>Trading Journal</div>
-            </div>
-          </div>
+        <div style={{ padding: "18px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <img src={logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", boxShadow: `0 0 0 1px ${C.border}, 0 0 14px ${C.accent}33`, flexShrink: 0 }} />
           <button onClick={onClose} className="sidebar-close-btn" style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer", display: "none" }}>×</button>
         </div>
         <div style={{ padding: "12px 8px", flex: 1, overflowY: "auto" }}>
