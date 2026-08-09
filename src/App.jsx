@@ -2639,11 +2639,13 @@ function ShareModal({ trade, dispatch }) {
   );
 }function ShareLinkBox({ trade }) {
   const [link, setLink] = useState(null);
+  const [copied, setCopied] = useState(false);
   useEffect(() => { createShareLink(trade).then(setLink); }, [trade.id]);
+  const copy = () => { if (link) navigator.clipboard.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); };
   return (
     <>
-      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", fontSize: 11, color: C.textMuted, wordBreak: "break-all", marginBottom: 14, lineHeight: 1.7 }}>{link || "Generating link…"}</div>
-      <Btn onClick={() => link && navigator.clipboard.writeText(link)} disabled={!link} style={{ width: "100%", justifyContent: "center" }}>📋 Copy Share Link</Btn>
+      <div className="mono" style={{ background: C.bg, border: `1px solid ${C.accent}30`, borderRadius: 12, padding: "14px 16px", fontSize: 12, color: C.textMuted, wordBreak: "break-all", marginBottom: 14, lineHeight: 1.7 }}>{link || "Generating link…"}</div>
+      <Btn onClick={copy} disabled={!link} style={{ width: "100%", justifyContent: "center" }}>{copied ? "✓ Copied to clipboard!" : <><LinkIcon size={15} /> Copy Share Link</>}</Btn>
     </>
   );
 }
@@ -2927,6 +2929,49 @@ async function renderShareCardPNG(trade, screenshotUrl, frame) {
 // Step 1 of the image flow — pick which screenshot, its aspect, and its
 // crop/zoom. The chart-crop preview canvas uses the exact same
 // drawShareChartCrop() call the final export uses, just at a smaller size.
+// ─── SHARE FLOW — shared step-wizard chrome ─────────────────────────────────
+// One consistent shell (icon chip, title, step-progress dots, footer) used by
+// every screen in the share flow (chooser → frame → result, and the link
+// variant) so the whole thing reads as one guided flow instead of four
+// separately-styled popups.
+const CameraIcon = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" /><circle cx="12" cy="13.5" r="3.5" />
+  </svg>
+);
+const LinkIcon = ({ size = 20, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 17H7a5 5 0 0 1 0-10h2" /><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M8 12h8" />
+  </svg>
+);
+function ShareStepChrome({ icon, iconColor, title, subtitle, step, totalSteps, onClose, maxWidth = 480, children, footer }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && onClose && onClose()}>
+      <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 20, padding: 0, width: "100%", maxWidth, maxHeight: "92vh", overflowY: "auto", boxShadow: `0 0 0 1px ${C.accent}22, 0 20px 60px #000a` }}>
+        <div style={{ padding: "22px 24px 0" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: step ? 14 : 6 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: (iconColor || C.accent) + "1f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: iconColor || C.accent }}>{icon}</div>
+            <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+              <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>{title}</h2>
+              {subtitle && <div style={{ fontSize: 12.5, color: C.textMuted, marginTop: 3, lineHeight: 1.4 }}>{subtitle}</div>}
+            </div>
+            {onClose && <button onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer", flexShrink: 0, lineHeight: 1 }}>×</button>}
+          </div>
+          {step && (
+            <div style={{ display: "flex", gap: 5, marginBottom: 18 }}>
+              {Array.from({ length: totalSteps }).map((_, i) => (
+                <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i < step ? C.accent : C.border }} />
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{ padding: "0 24px 22px" }}>{children}</div>
+        {footer && <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10 }}>{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
 function FrameChartModal({ trade, onCancel, onConfirm }) {
   const screenshots = trade.screenshots || [];
   const [shotIndex, setShotIndex] = useState(0);
@@ -2977,35 +3022,42 @@ function FrameChartModal({ trade, onCancel, onConfirm }) {
     finally { setGenerating(false); }
   };
 
-  const toggleBtn = (val, label) => (
-    <button onClick={() => setAspect(val)} style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: `1px solid ${aspect === val ? C.accent : C.border}`, background: aspect === val ? C.accentDim : "transparent", color: aspect === val ? C.accent : C.textMuted, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{label}</button>
+  const toggleBtn = (val, label, Icon) => (
+    <button onClick={() => setAspect(val)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "10px 0", borderRadius: 12, border: `1px solid ${aspect === val ? C.accent : C.border}`, background: aspect === val ? C.accentDim : C.surfaceHigh, color: aspect === val ? C.accent : C.textMuted, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+      <Icon size={16} /> {label}
+    </button>
   );
+  const WideIcon = ({ size }) => <svg width={size} height={size * 0.7} viewBox="0 0 24 17" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="1" width="22" height="15" rx="2.5" /></svg>;
+  const TallIcon = ({ size }) => <svg width={size * 0.7} height={size} viewBox="0 0 17 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="1" width="15" height="22" rx="2.5" /></svg>;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && onCancel()}>
-      <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: "100%", maxWidth: 500 }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>Frame your chart</h2>
-          <button onClick={onCancel} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer" }}>×</button>
-        </div>
-        <div style={{ fontSize: 12.5, color: C.textMuted, marginBottom: 14 }}>Drag to move, use the slider to zoom. What you see is what goes on the card.</div>
+    <ShareStepChrome icon={<CameraIcon />} title="Frame your chart" subtitle="Drag to move, use the slider to zoom — what you see is what goes on the card." step={2} totalSteps={3} onClose={onCancel} maxWidth={520}
+      footer={<>
+        <Btn variant="ghost" onClick={onCancel} style={{ flex: 1, justifyContent: "center" }}>Cancel</Btn>
+        <Btn disabled={!imgEl || generating} onClick={create} style={{ flex: 1, justifyContent: "center" }}>{generating ? "Creating…" : "Create Image →"}</Btn>
+      </>}>
 
+      {/* Source strip — screenshot picker + aspect toggle grouped in one card */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, marginBottom: 14 }}>
         {screenshots.length > 1 && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
             {screenshots.map((s, i) => (
-              <button key={i} onClick={() => setShotIndex(i)} style={{ width: 64, height: 44, borderRadius: 8, overflow: "hidden", border: `2px solid ${i === shotIndex ? C.accent : C.border}`, padding: 0, background: C.surfaceHigh, cursor: "pointer" }}>
+              <button key={i} onClick={() => setShotIndex(i)} style={{ width: 56, height: 40, borderRadius: 8, overflow: "hidden", border: `2px solid ${i === shotIndex ? C.accent : C.border}`, padding: 0, background: C.surfaceHigh, cursor: "pointer", flexShrink: 0 }}>
                 <img src={s.url} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               </button>
             ))}
           </div>
         )}
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          {toggleBtn("wide", "▭ Wide")}
-          {toggleBtn("tall", "▯ Tall")}
+        <div style={{ display: "flex", gap: 8 }}>
+          {toggleBtn("wide", "Wide", WideIcon)}
+          {toggleBtn("tall", "Tall", TallIcon)}
         </div>
+      </div>
 
-        <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 16, position: "relative", touchAction: "none", cursor: imgEl ? "grab" : "default" }}
+      {/* Live preview */}
+      <div style={{ position: "relative", marginBottom: 14 }}>
+        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 2, background: "#000a", border: `1px solid ${C.accent}55`, borderRadius: 999, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: C.accent, letterSpacing: 0.5 }}>LIVE PREVIEW</div>
+        <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${C.accent}40`, boxShadow: `0 0 0 1px ${C.border}, 0 8px 24px #0007`, position: "relative", touchAction: "none", cursor: imgEl ? "grab" : "default" }}
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
           <canvas ref={canvasRef} style={{ width: "100%", height: previewH, display: "block" }} />
           {!imgEl && (
@@ -3014,20 +3066,17 @@ function FrameChartModal({ trade, onCancel, onConfirm }) {
             </div>
           )}
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <span style={{ color: C.textMuted, fontSize: 16 }}>−</span>
-          <input type="range" min="1" max="3" step="0.01" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} style={{ flex: 1 }} />
-          <span style={{ color: C.textMuted, fontSize: 16 }}>+</span>
-          <Btn small variant="ghost" onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); }}>Reset</Btn>
-        </div>
-
-        <div style={{ display: "flex", gap: 10 }}>
-          <Btn variant="ghost" onClick={onCancel} style={{ flex: 1, justifyContent: "center" }}>Cancel</Btn>
-          <Btn disabled={!imgEl || generating} onClick={create} style={{ flex: 1, justifyContent: "center" }}>{generating ? "Creating…" : "Create Image"}</Btn>
-        </div>
       </div>
-    </div>
+
+      {/* Zoom control */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 14px" }}>
+        <span style={{ color: C.textMuted, fontSize: 15 }}>−</span>
+        <input type="range" min="1" max="3" step="0.01" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} style={{ flex: 1, accentColor: C.accent }} />
+        <span style={{ color: C.textMuted, fontSize: 15 }}>+</span>
+        <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: C.accent, width: 42, textAlign: "right" }}>{Math.round(zoom * 100)}%</div>
+        <Btn small variant="ghost" onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); }}>Reset</Btn>
+      </div>
+    </ShareStepChrome>
   );
 }
 
@@ -3047,47 +3096,42 @@ function ShareCardResultModal({ trade, pngUrl, onBack, onClose }) {
     } catch { download(); }
   };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: "100%", maxWidth: 380, maxHeight: "92vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>Your Trade Card</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer" }}>×</button>
-        </div>
-        <img src={pngUrl} style={{ width: "100%", borderRadius: 12, border: `1px solid ${C.border}`, marginBottom: 18, display: "block" }} />
-        <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-          <Btn variant="ghost" onClick={onBack} style={{ flex: 1, justifyContent: "center" }}>← Re-frame</Btn>
-          <Btn onClick={download} style={{ flex: 1, justifyContent: "center" }}>⬇ Download PNG</Btn>
-        </div>
-        <Btn variant="ghost" onClick={copyImage} style={{ width: "100%", justifyContent: "center" }}>{copied ? "✓ Copied!" : "📋 Copy Image"}</Btn>
+    <ShareStepChrome icon={<span style={{ fontSize: 18 }}>✓</span>} title="Your card is ready" subtitle="Share it anywhere — download the file or copy it straight to your clipboard." step={3} totalSteps={3} onClose={onClose} maxWidth={400}
+      footer={<>
+        <Btn variant="ghost" onClick={onBack} style={{ flex: 1, justifyContent: "center" }}>← Re-frame</Btn>
+        <Btn onClick={download} style={{ flex: 1, justifyContent: "center" }}>⬇ Download</Btn>
+      </>}>
+      <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${C.accent}40`, boxShadow: `0 0 0 1px ${C.border}, 0 8px 24px #0007`, marginBottom: 14 }}>
+        <img src={pngUrl} style={{ width: "100%", display: "block" }} />
       </div>
-    </div>
+      <Btn variant="tealOutline" onClick={copyImage} style={{ width: "100%", justifyContent: "center" }}>{copied ? "✓ Copied to clipboard!" : "📋 Copy Image"}</Btn>
+    </ShareStepChrome>
   );
 }
 
 // Step 0 — chooser between the new PNG card and the existing view-only link.
 function ShareChooserModal({ trade, onClose, onPickImage, onPickLink }) {
   const hasScreenshots = (trade.screenshots || []).length > 0;
-  const row = (icon, title, sub, onClick, disabled) => (
-    <button onClick={disabled ? undefined : onClick} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 14, padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surfaceHigh, color: C.text, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, marginBottom: 10 }}>
-      <span style={{ fontSize: 22 }}>{icon}</span>
-      <span>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>{title}</div>
-        <div style={{ fontSize: 12, color: C.textMuted }}>{sub}</div>
-      </span>
+  const tile = (Icon, iconColor, title, sub, onClick, disabled) => (
+    <button onClick={disabled ? undefined : onClick} style={{
+      flex: 1, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+      padding: "22px 14px", borderRadius: 16, border: `1px solid ${C.border}`, background: C.surfaceHigh, color: C.text,
+      cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1, transition: "border-color 0.15s, background 0.15s",
+    }}
+      onMouseEnter={disabled ? null : e => { e.currentTarget.style.borderColor = iconColor; e.currentTarget.style.background = iconColor + "10"; }}
+      onMouseLeave={disabled ? null : e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.surfaceHigh; }}>
+      <div style={{ width: 44, height: 44, borderRadius: 12, background: iconColor + "1f", color: iconColor, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={20} /></div>
+      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{title}</div>
+      <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.4 }}>{sub}</div>
     </button>
   );
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: "100%", maxWidth: 400 }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>Share</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer" }}>×</button>
-        </div>
-        <div style={{ fontSize: 12.5, color: C.textDim, marginBottom: 16 }}>{trade.symbol} · {fmtDate(trade.date)} — 1 trade</div>
-        {row("📸", "Image for social", hasScreenshots ? "A card you can post anywhere" : "Add a chart screenshot to this trade first", onPickImage, !hasScreenshots)}
-        {row("🔗", "Shareable link", "Anyone with the link can view it", onPickLink, false)}
+    <ShareStepChrome icon={<LinkIcon />} title="Share" subtitle={`${trade.symbol} · ${fmtDate(trade.date)} — 1 trade`} step={1} totalSteps={3} onClose={onClose} maxWidth={420}>
+      <div style={{ display: "flex", gap: 12 }}>
+        {tile(CameraIcon, C.accent, "Image for social", hasScreenshots ? "A card you can post anywhere" : "Add a chart screenshot first", onPickImage, !hasScreenshots)}
+        {tile(LinkIcon, C.blue, "Shareable link", "Anyone with the link can view it", onPickLink, false)}
       </div>
-    </div>
+    </ShareStepChrome>
   );
 }
 
@@ -4942,13 +4986,17 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
         <ShareCardResultModal trade={trade} pngUrl={sharePngUrl} onBack={() => setShareStep("frame")} onClose={closeShare} />
       )}
       {shareStep === "link" && (
-        <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={closeShare}>
-          <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 28, width: "100%", maxWidth: 500 }}>
-            <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}><h2 style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>Share Trade</h2><button onClick={closeShare} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer" }}>×</button></div>
-            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>Anyone with this link can view your trade — no account needed.</div>
-            <ShareLinkBox trade={trade} />
+        <ShareStepChrome icon={<LinkIcon />} iconColor={C.blue} title="Shareable Link" subtitle="Anyone with this link can view your trade — no account needed." onClose={closeShare} maxWidth={460}>
+          <ShareLinkBox trade={trade} />
+          <div style={{ marginTop: 16, padding: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+            <SectionLabel>Trade Summary</SectionLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {[["Symbol", trade.symbol], ["Direction", trade.direction], ["P&L", fmt$(trade.pnl)], ["Pips", trade.pips ? `${trade.pips > 0 ? "+" : ""}${trade.pips}` : "—"], ["Outcome", trade.outcome], ["Setup", trade.setup || "—"]].map(([k, v]) => (
+                <div key={k}><span style={{ fontSize: 11, color: C.textDim }}>{k}: </span><span style={{ fontSize: 12, fontWeight: 600 }}>{v}</span></div>
+              ))}
+            </div>
           </div>
-        </div>
+        </ShareStepChrome>
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
