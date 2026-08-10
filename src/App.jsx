@@ -2703,34 +2703,73 @@ function wrapCanvasText(ctx, text, maxWidth) {
 // ── Daily mindset quotes ─────────────────────────────────────────────────
 // Rotates automatically once per calendar day (deterministic by day-of-year
 // + year, so every device shows the same quote on the same day without
-// needing a server). Original lines, grouped by theme.
+// needing a server). Each quote carries a short "emphasis" phrase that gets
+// highlighted in the share card's quote box.
 const DAILY_QUOTES = [
-  "One trade never makes a trader — the next one matters just as much.",
-  "Discipline is choosing what you want most over what you want now.",
-  "Patience isn't waiting. It's how you act while you wait for your setup.",
-  "The market rewards process, not urgency.",
-  "A good exit protects tomorrow's opportunities as much as today's account.",
-  "Your edge only works if you let it play out enough times.",
-  "Time in the market beats timing every candle.",
-  "Discipline is remembering the plan after the trade is already open.",
-  "Small, consistent decisions compound faster than one big swing.",
-  "The best traders are boring on purpose.",
-  "Losses are tuition. Keep showing up to class.",
-  "You don't need to be right — you need to be disciplined.",
-  "Protect your focus like you protect your capital.",
-  "Every session is a fresh decision, not a continuation of yesterday's mood.",
-  "Slow down at the entry so you don't have to rush the exit.",
-  "Consistency is a decision made before the chart opens, not during it.",
-  "The plan is only as good as your patience to follow it.",
-  "Waiting for the setup is still doing the work.",
-  "Great trades are built in the preparation, not the execution.",
-  "One disciplined no is worth ten undisciplined yeses.",
+  { text: "One trade never makes a trader — the next one matters just as much.", emphasis: "the next one" },
+  { text: "Discipline is choosing what you want most over what you want now.", emphasis: "what you want now" },
+  { text: "Patience isn't waiting. It's how you act while you wait for your setup.", emphasis: "how you act" },
+  { text: "The market rewards process, not urgency.", emphasis: "not urgency" },
+  { text: "A good exit protects tomorrow's opportunities as much as today's account.", emphasis: "tomorrow's opportunities" },
+  { text: "Your edge only works if you let it play out enough times.", emphasis: "play out" },
+  { text: "Time in the market beats timing every candle.", emphasis: "beats timing" },
+  { text: "Discipline is remembering the plan after the trade is already open.", emphasis: "already open" },
+  { text: "Small, consistent decisions compound faster than one big swing.", emphasis: "compound faster" },
+  { text: "The best traders are boring on purpose.", emphasis: "boring on purpose" },
+  { text: "Losses are tuition. Keep showing up to class.", emphasis: "keep showing up" },
+  { text: "You don't need to be right — you need to be disciplined.", emphasis: "be disciplined" },
+  { text: "Protect your focus like you protect your capital.", emphasis: "protect your capital" },
+  { text: "Every session is a fresh decision, not a continuation of yesterday's mood.", emphasis: "fresh decision" },
+  { text: "Slow down at the entry so you don't have to rush the exit.", emphasis: "rush the exit" },
+  { text: "Consistency is a decision made before the chart opens, not during it.", emphasis: "before the chart opens" },
+  { text: "The plan is only as good as your patience to follow it.", emphasis: "patience to follow it" },
+  { text: "Waiting for the setup is still doing the work.", emphasis: "still doing the work" },
+  { text: "Great trades are built in the preparation, not the execution.", emphasis: "in the preparation" },
+  { text: "One disciplined no is worth ten undisciplined yeses.", emphasis: "worth ten" },
 ];
 function dailyQuote(date = new Date()) {
   const start = new Date(date.getFullYear(), 0, 0);
   const dayOfYear = Math.floor((date - start) / 86400000);
   const idx = (dayOfYear + date.getFullYear()) % DAILY_QUOTES.length;
   return DAILY_QUOTES[idx];
+}
+// Wraps `text` to maxWidth (same greedy algorithm as wrapCanvasText) while
+// tagging which words fall inside the `emphasis` phrase, so each line can be
+// drawn with that phrase in a different color/weight.
+function wrapEmphasisLines(ctx, text, emphasis, maxWidth) {
+  const words = (text || "").split(/\s+/).filter(Boolean);
+  const emphWords = (emphasis || "").split(/\s+/).filter(Boolean);
+  const norm = s => s.toLowerCase().replace(/[^a-z']/g, "");
+  let emphStart = -1;
+  if (emphWords.length) {
+    for (let i = 0; i <= words.length - emphWords.length; i++) {
+      if (emphWords.every((w, j) => norm(words[i + j]) === norm(w))) { emphStart = i; break; }
+    }
+  }
+  const tagged = words.map((w, i) => ({ w, emph: emphStart >= 0 && i >= emphStart && i < emphStart + emphWords.length }));
+  const lines = []; let cur = [], curText = "";
+  for (const tw of tagged) {
+    const test = curText ? curText + " " + tw.w : tw.w;
+    if (ctx.measureText(test).width > maxWidth && curText) { lines.push(cur); cur = [tw]; curText = tw.w; }
+    else { cur.push(tw); curText = test; }
+  }
+  if (cur.length) lines.push(cur);
+  return lines;
+}
+// Draws one wrapped+tagged line, switching font/color per word for the
+// emphasized phrase. `align` is "left" or "center" (x is the left edge or
+// the center point, respectively).
+function drawEmphasisLine(ctx, lineWords, x, y, fontNormal, fontEmph, colorNormal, colorEmph, align) {
+  const widths = lineWords.map(tw => { ctx.font = tw.emph ? fontEmph : fontNormal; return ctx.measureText(tw.w).width; });
+  ctx.font = fontNormal; const spaceW = ctx.measureText(" ").width;
+  const total = widths.reduce((a, b) => a + b, 0) + spaceW * (lineWords.length - 1);
+  let cx = align === "center" ? x - total / 2 : x;
+  ctx.textAlign = "left";
+  lineWords.forEach((tw, i) => {
+    ctx.font = tw.emph ? fontEmph : fontNormal; ctx.fillStyle = tw.emph ? colorEmph : colorNormal;
+    ctx.fillText(tw.w, cx, y);
+    cx += widths[i] + spaceW;
+  });
 }
 
 // Small vector icon set drawn directly on the canvas (no emoji/webfont
@@ -2788,14 +2827,15 @@ function drawTargetIcon(ctx, cx, cy, r, color) {
 // always agree.
 function shareCardLayout(aspect) {
   const W = SHARE_CARD_W, outerPad = 18, pad = 56;
-  const headerY = pad + 6, headerH = 86;
-  const statsY = headerY + headerH + 30, statsH = 300;
+  const headerY = pad + 6, headerH = 78;
+  const quoteY = headerY + headerH + 30, quoteH = 172;
+  const statsRowY = quoteY + quoteH + 32, statsRowH = 168;
   const chartLabelH = 36;
-  const chartY = statsY + statsH + 34 + chartLabelH, chartH = SHARE_CHART_H[aspect] || SHARE_CHART_H.wide;
-  const quoteY = chartY + chartH + 32, quoteH = 190;
-  const taglineY = quoteY + quoteH + 48;
+  const chartY = statsRowY + statsRowH + 30 + chartLabelH, chartH = SHARE_CHART_H[aspect] || SHARE_CHART_H.wide;
+  const bottomY = chartY + chartH + 28, bottomH = 112;
+  const taglineY = bottomY + bottomH + 44;
   const H = taglineY + 26;
-  return { W, H, pad, outerPad, headerY, headerH, statsY, statsH, chartLabelH, chartY, chartH, quoteY, quoteH, taglineY };
+  return { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomH, taglineY };
 }
 // Derives 2–3 letter initials from SHARE_BRAND for the decorative watermark
 // mark (e.g. "DR. JOURNAL" → "DJ") — used in the header and footer.
@@ -2822,7 +2862,7 @@ function drawShareChartCrop(ctx, img, x, y, w, h, zoom, offsetXFrac, offsetYFrac
 // Core draw routine, shared by the live chart-crop preview (small canvas,
 // chart region only) and the full card export (whole layout) — see below.
 function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
-  const { W, H, pad, outerPad, headerY, headerH, statsY, statsH, chartLabelH, chartY, chartH, quoteY, quoteH, taglineY } = layout;
+  const { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomH, taglineY } = layout;
   const fees = parseFloat(trade.fees) || 0;
   const netPnl = trade.pnl - fees;
   const pnlColor = trade.outcome === "BE" ? "#FFD400" : netPnl >= 0 ? "#A1E503" : "#FF2965";
@@ -2837,17 +2877,24 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
   glow.addColorStop(0, pnlColor + "1c"); glow.addColorStop(1, "transparent");
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 
-  // ── Outer framed-card border ───────────────────────────────────────────
+  // ── Outer framed-card border + HUD corner accents ──────────────────────
   ctx.save();
   ctx.shadowColor = "#A1E50355"; ctx.shadowBlur = 26;
   ctx.strokeStyle = "#A1E50399"; ctx.lineWidth = 2;
   roundRectPath(ctx, outerPad, outerPad, W - outerPad * 2, H - outerPad * 2, 28); ctx.stroke();
   ctx.restore();
+  ctx.strokeStyle = "#A1E50355"; ctx.lineWidth = 1.5;
+  const chC = 26; // corner chamfer size
+  // top-right
+  ctx.beginPath(); ctx.moveTo(W - outerPad - 210, outerPad + 18); ctx.lineTo(W - outerPad - chC, outerPad + 18); ctx.lineTo(W - outerPad - 2, outerPad + chC); ctx.stroke();
+  // bottom-left
+  ctx.beginPath(); ctx.moveTo(outerPad + 2, H - outerPad - chC); ctx.lineTo(outerPad + chC, H - outerPad - 18); ctx.lineTo(outerPad + 150, H - outerPad - 18); ctx.stroke();
+  // bottom-right
+  ctx.beginPath(); ctx.moveTo(W - outerPad - 150, H - outerPad - 18); ctx.lineTo(W - outerPad - chC, H - outerPad - 18); ctx.lineTo(W - outerPad - 2, H - outerPad - chC); ctx.stroke();
 
   // ── Header ──────────────────────────────────────────────────────────────
-  // faint giant initials watermark, upper-right, behind the "Trade Result" pill
   ctx.save();
-  ctx.textAlign = "right"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#ffffff08"; ctx.font = "800 128px Inter, sans-serif";
+  ctx.textAlign = "right"; ctx.fillStyle = "#ffffff08"; ctx.font = "800 128px Inter, sans-serif";
   ctx.fillText(initials, W - pad, headerY + 92);
   ctx.restore();
 
@@ -2864,86 +2911,57 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
 
   ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#f2f4f9"; ctx.font = "800 25px Inter, sans-serif";
   ctx.fillText(SHARE_BRAND, pad + 80, headerY + 28);
-  const brandW = ctx.measureText(SHARE_BRAND).width;
-  // verified badge
-  const vbx = pad + 80 + brandW + 20, vby = headerY + 20;
-  ctx.fillStyle = "#A1E503"; ctx.beginPath(); ctx.arc(vbx, vby, 11, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "#000000"; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ctx.beginPath(); ctx.moveTo(vbx - 5, vby); ctx.lineTo(vbx - 1.5, vby + 4); ctx.lineTo(vbx + 5.5, vby - 5); ctx.stroke();
-
   ctx.fillStyle = "#8a93a8"; ctx.font = "500 17px Inter, sans-serif";
   ctx.fillText(fmtDate(trade.date), pad + 80, headerY + 54);
 
-  // "TRADE RESULT" status pill, top-right
-  ctx.font = "700 13px Inter, sans-serif";
+  // "TRADE RESULT" — plain label + status dot, no pill this time
+  ctx.font = "700 14px Inter, sans-serif";
   const pillLabel = "T R A D E   R E S U L T";
-  const pillTextW = ctx.measureText(pillLabel).width;
-  const pillW = pillTextW + 46, pillH = 32, pillX = W - pad - pillW, pillY = headerY + 4;
-  ctx.strokeStyle = "#ffffff2a"; ctx.lineWidth = 1.2; roundRectPath(ctx, pillX, pillY, pillW, pillH, 16); ctx.stroke();
-  ctx.textAlign = "left"; ctx.fillStyle = "#c7cbd6";
-  ctx.fillText(pillLabel, pillX + 16, pillY + pillH / 2 + 4);
-  const dotCx = pillX + pillW - 18, dotCy = pillY + pillH / 2;
+  const labelW = ctx.measureText(pillLabel).width;
+  const dotCx = W - pad - 8, dotCy = headerY + 20;
+  ctx.textAlign = "left"; ctx.fillStyle = pnlColor;
+  ctx.fillText(pillLabel, dotCx - 24 - labelW, dotCy + 5);
   ctx.strokeStyle = pnlColor + "88"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(dotCx, dotCy, 7, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = pnlColor; ctx.beginPath(); ctx.arc(dotCx, dotCy, 3.4, 0, Math.PI * 2); ctx.fill();
 
-  // ── Stats block ─────────────────────────────────────────────────────────
-  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5;
-  roundRectPath(ctx, pad, statsY, W - pad * 2, statsH, 20); ctx.stroke();
+  // ── Quote box ───────────────────────────────────────────────────────────
+  ctx.fillStyle = "#ffffff08"; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.fill();
+  ctx.strokeStyle = "#A1E5033d"; ctx.lineWidth = 1.2; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.stroke();
 
-  const innerPad = 32;
-  const leftW = (W - pad * 2) * 0.5, dividerX = pad + leftW, rightX = dividerX + 44;
+  ctx.font = "800 56px Georgia, serif"; ctx.fillStyle = "#A1E5036e";
+  ctx.textAlign = "left"; ctx.fillText("“", pad + 26, quoteY + 78);
+  ctx.textAlign = "right"; ctx.fillText("”", W - pad - 26, quoteY + 132);
 
-  // P&L (net of fees)
+  const quote = dailyQuote(new Date(trade.date || Date.now()));
+  const quoteFontNormal = "500 25px Inter, sans-serif", quoteFontEmph = "800 25px Inter, sans-serif";
+  const quoteMaxW = W - pad * 2 - 220;
+  ctx.font = quoteFontNormal;
+  const qLines = wrapEmphasisLines(ctx, quote.text, quote.emphasis, quoteMaxW);
+  const qLineH = 34, qStartY = quoteY + quoteH / 2 - ((Math.min(qLines.length, 2) - 1) * qLineH) / 2 + 4;
+  qLines.slice(0, 2).forEach((ln, i) => drawEmphasisLine(ctx, ln, W / 2, qStartY + i * qLineH, quoteFontNormal, quoteFontEmph, "#e5e7ef", "#A1E503", "center"));
+
+  ctx.strokeStyle = "#A1E50399"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 26, quoteY + quoteH - 26); ctx.lineTo(W / 2 + 26, quoteY + quoteH - 26); ctx.stroke();
+
+  // ── P&L (borderless) + Outcome box ─────────────────────────────────────
   ctx.textAlign = "left"; ctx.fillStyle = "#8a93a8"; ctx.font = "700 15px Inter, sans-serif";
-  ctx.fillText("P & L", pad + innerPad, statsY + 52);
-  ctx.fillStyle = pnlColor; ctx.font = "800 72px Inter, sans-serif";
-  ctx.fillText(fmt$(netPnl), pad + innerPad, statsY + 138);
+  ctx.fillText("P & L", pad, statsRowY + 34);
+  ctx.fillStyle = pnlColor; ctx.font = "800 68px Inter, sans-serif";
+  ctx.fillText(fmt$(netPnl), pad, statsRowY + 116);
 
-  // Outcome pill (replaces the old ticker box)
-  const outW = leftW - innerPad * 2, outH = 78, outY = statsY + 172, outX = pad + innerPad;
-  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5; roundRectPath(ctx, outX, outY, outW, outH, 14); ctx.stroke();
-  ctx.fillStyle = "#6b7488"; ctx.font = "700 13px Inter, sans-serif";
-  ctx.fillText("O U T C O M E", outX + 20, outY + 28);
-  ctx.fillStyle = "#eef0f5"; ctx.font = "800 24px Inter, sans-serif";
+  const outW = 330, outH = statsRowH, outX = W - pad - outW, outY = statsRowY;
+  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5; roundRectPath(ctx, outX, outY, outW, outH, 16); ctx.stroke();
+  ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 13px Inter, sans-serif";
+  ctx.fillText("O U T C O M E", outX + 26, outY + 40);
+  ctx.fillStyle = "#f2f4f9"; ctx.font = "800 32px Inter, sans-serif";
+  ctx.fillText((trade.outcome || "—").toUpperCase(), outX + 26, outY + 84);
   const pipsKnown = trade.pips !== undefined && trade.pips !== null && trade.pips !== "";
-  const outcomeVal = (trade.outcome || "—").toUpperCase() + (pipsKnown ? `  (${trade.pips > 0 ? "+" : ""}${trade.pips}p)` : "");
-  ctx.fillText(outcomeVal, outX + 20, outY + 58);
-  // outcome check/x/be box, right end of the pill
-  const obSize = 46, obX = outX + outW - obSize - 14, obY = outY + (outH - obSize) / 2;
-  ctx.fillStyle = pnlColor + "1a"; roundRectPath(ctx, obX, obY, obSize, obSize, 12); ctx.fill();
-  ctx.strokeStyle = pnlColor + "70"; ctx.lineWidth = 1.5; roundRectPath(ctx, obX, obY, obSize, obSize, 12); ctx.stroke();
-  drawStatIcon(ctx, obX + obSize / 2, obY + obSize / 2, 20, outcomeIcon, pnlColor);
-
-  // divider
-  ctx.strokeStyle = "#ffffff1c"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(dividerX, statsY + 20); ctx.lineTo(dividerX, statsY + statsH - 20); ctx.stroke();
-
-  // Right column — Direction / Session / Setup / Symbol
-  const rows = [
-    ["direction-" + (isLong ? "long" : "short"), dirColor, "DIRECTION", (trade.direction || "—").toUpperCase(), false],
-    ["session", "#c9a9ff", "SESSION", (trade.session || "—").toUpperCase(), false],
-    ["setup", "#FFD400", "SETUP", trade.setup || "—", false],
-    ["symbol", "#A1E503", "SYMBOL", (trade.symbol || "—").toUpperCase(), true],
-  ];
-  const rowH = statsH / 4;
-  const iconBoxSize = 44;
-  rows.forEach(([icon, color, label, value, boxed], i) => {
-    const ry = statsY + rowH * i + rowH / 2;
-    if (boxed) {
-      ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5;
-      roundRectPath(ctx, rightX - 12, ry - rowH / 2 + 8, (W - pad) - (rightX - 12) - innerPad + 12, rowH - 16, 12); ctx.stroke();
-    }
-    ctx.fillStyle = color + "1a"; roundRectPath(ctx, rightX, ry - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.fill();
-    ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5; roundRectPath(ctx, rightX, ry - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.stroke();
-    drawStatIcon(ctx, rightX + iconBoxSize / 2, ry, 18, icon, color);
-    ctx.textAlign = "left"; ctx.fillStyle = "#6b7488"; ctx.font = "700 13px Inter, sans-serif";
-    ctx.fillText(label, rightX + iconBoxSize + 18, ry - 8);
-    ctx.fillStyle = "#eef0f5"; ctx.font = "800 20px Inter, sans-serif";
-    let val = String(value);
-    const maxW = W - pad - innerPad - (rightX + iconBoxSize + 18);
-    while (ctx.measureText(val).width > maxW && val.length > 3) val = val.slice(0, -2) + "…";
-    ctx.fillText(val, rightX + iconBoxSize + 18, ry + 18);
-  });
+  ctx.fillStyle = "#8a93a8"; ctx.font = "500 16px Inter, sans-serif";
+  ctx.fillText(pipsKnown ? `(${trade.pips > 0 ? "+" : ""}${trade.pips} pips)` : "", outX + 26, outY + 112);
+  const obSize = 58, obCx = outX + outW - 44, obCy = outY + outH / 2;
+  ctx.fillStyle = pnlColor + "12"; ctx.beginPath(); ctx.arc(obCx, obCy, obSize / 2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = pnlColor + "88"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(obCx, obCy, obSize / 2, 0, Math.PI * 2); ctx.stroke();
+  drawStatIcon(ctx, obCx, obCy, 22, outcomeIcon, pnlColor);
 
   // ── Chart ───────────────────────────────────────────────────────────────
   ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 14px Inter, sans-serif";
@@ -2962,37 +2980,36 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
   roundRectPath(ctx, pad, chartY, W - pad * 2, chartH, 18); ctx.stroke();
   ctx.restore();
 
-  // ── Daily mindset quote ─────────────────────────────────────────────────
-  ctx.fillStyle = "#ffffff08"; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.fill();
-  ctx.strokeStyle = "#ffffff14"; ctx.lineWidth = 1; roundRectPath(ctx, pad, quoteY, W - pad * 2, quoteH, 18); ctx.stroke();
+  // ── Bottom stats bar — Direction / Session / Setup / Symbol, 4 columns ──
+  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5;
+  roundRectPath(ctx, pad, bottomY, W - pad * 2, bottomH, 18); ctx.stroke();
 
-  const quoteColW = 168;
-  ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 13px Inter, sans-serif";
-  ctx.fillText("D A I L Y", pad + 30, quoteY + 40);
-  ctx.fillText("M I N D S E T", pad + 30, quoteY + 58);
-  ctx.fillStyle = "#A1E50399"; ctx.font = "800 64px Georgia, serif";
-  ctx.fillText("“", pad + 24, quoteY + 132);
+  const rows = [
+    ["direction-" + (isLong ? "long" : "short"), dirColor, "DIRECTION", (trade.direction || "—").toUpperCase()],
+    ["session", "#c9a9ff", "SESSION", (trade.session || "—").toUpperCase()],
+    ["setup", "#FFD400", "SETUP", trade.setup || "—"],
+    ["symbol", "#A1E503", "SYMBOL", (trade.symbol || "—").toUpperCase()],
+  ];
+  const colW = (W - pad * 2) / 4, iconBoxSize = 46;
+  rows.forEach(([icon, color, label, value], i) => {
+    const colX = pad + colW * i;
+    if (i > 0) { ctx.strokeStyle = "#ffffff16"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(colX, bottomY + 18); ctx.lineTo(colX, bottomY + bottomH - 18); ctx.stroke(); }
+    const iconX = colX + 22, iconCy = bottomY + bottomH / 2;
+    ctx.fillStyle = color + "1a"; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.fill();
+    ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.stroke();
+    drawStatIcon(ctx, iconX + iconBoxSize / 2, iconCy, 18, icon, color);
+    const textX = iconX + iconBoxSize + 16, textMaxW = colW - (iconBoxSize + 22 + 20);
+    ctx.textAlign = "left"; ctx.fillStyle = "#6b7488"; ctx.font = "700 12px Inter, sans-serif";
+    ctx.fillText(label, textX, iconCy - 8);
+    ctx.fillStyle = "#eef0f5"; ctx.font = "800 18px Inter, sans-serif";
+    let val = String(value);
+    while (ctx.measureText(val).width > textMaxW && val.length > 3) val = val.slice(0, -2) + "…";
+    ctx.fillText(val, textX, iconCy + 17);
+  });
 
-  // faint giant initials watermark, footer right side
-  ctx.save();
-  ctx.textAlign = "right"; ctx.fillStyle = "#A1E50314"; ctx.font = "800 110px Inter, sans-serif";
-  ctx.fillText(initials, W - pad - 6, quoteY + quoteH - 26);
-  ctx.restore();
-
-  ctx.font = "500 24px Inter, sans-serif"; ctx.fillStyle = "#d7dae4";
-  const quote = dailyQuote(new Date(trade.date || Date.now()));
-  const lines = wrapCanvasText(ctx, quote, W - pad * 2 - quoteColW - 40);
-  const lineH = 32, startY = quoteY + quoteH / 2 - ((Math.min(lines.length, 3) - 1) * lineH) / 2 + 8;
-  lines.slice(0, 3).forEach((ln, i) => ctx.fillText(ln, pad + quoteColW, startY + i * lineH));
-
-  // Bottom tagline, dash rules either side
-  ctx.font = "600 14px Inter, sans-serif"; ctx.fillStyle = "#4b5266"; ctx.textAlign = "center";
-  const tagline = "J O U R N A L   ·   L E A R N   ·   D I S C I P L I N E   ·   G R O W";
-  ctx.fillText(tagline, W / 2, taglineY);
-  const tagW = ctx.measureText(tagline).width;
-  ctx.strokeStyle = "#4b526666"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(W / 2 - tagW / 2 - 60, taglineY - 5); ctx.lineTo(W / 2 - tagW / 2 - 16, taglineY - 5); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(W / 2 + tagW / 2 + 16, taglineY - 5); ctx.lineTo(W / 2 + tagW / 2 + 60, taglineY - 5); ctx.stroke();
+  // Bottom tagline
+  ctx.font = "700 15px Inter, sans-serif"; ctx.fillStyle = "#A1E503bb"; ctx.textAlign = "center";
+  ctx.fillText("O N E   T R A D E   N E V E R   M A K E S   A   T R A D E R", W / 2, taglineY);
 }
 
 async function renderShareCardPNG(trade, screenshotUrl, frame) {
