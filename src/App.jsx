@@ -2809,6 +2809,15 @@ function drawStatIcon(ctx, cx, cy, r, type, color) {
       ctx.beginPath(); ctx.moveTo(bx, cy - r * 0.6); ctx.lineTo(bx, cy + r * 0.6); ctx.stroke();
       ctx.fillRect(bx - r * 0.12, cy - h / 2, r * 0.24, h);
     });
+  } else if (type === "entry") {
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.85, cy); ctx.lineTo(cx + r * 0.15, cy); ctx.moveTo(cx - r * 0.1, cy - r * 0.5); ctx.lineTo(cx + r * 0.5, cy); ctx.lineTo(cx - r * 0.1, cy + r * 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + r * 0.75, cy - r * 0.85); ctx.lineTo(cx + r * 0.75, cy + r * 0.85); ctx.stroke();
+  } else if (type === "exit") {
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.15, cy); ctx.lineTo(cx + r * 0.85, cy); ctx.moveTo(cx + r * 0.4, cy - r * 0.5); ctx.lineTo(cx + r, cy); ctx.lineTo(cx + r * 0.4, cy + r * 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.75, cy - r * 0.85); ctx.lineTo(cx - r * 0.75, cy + r * 0.85); ctx.stroke();
+  } else if (type === "duration") {
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.85, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - r * 0.55); ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.42, cy + r * 0.14); ctx.stroke();
   } else { // outcome-be
     ctx.beginPath(); ctx.moveTo(cx - r * 0.38, cy); ctx.lineTo(cx + r * 0.38, cy); ctx.stroke();
   }
@@ -2832,10 +2841,10 @@ function shareCardLayout(aspect) {
   const statsRowY = quoteY + quoteH + 32, statsRowH = 168;
   const chartLabelH = 36;
   const chartY = statsRowY + statsRowH + 30 + chartLabelH, chartH = SHARE_CHART_H[aspect] || SHARE_CHART_H.wide;
-  const bottomY = chartY + chartH + 28, bottomH = 112;
+  const bottomY = chartY + chartH + 28, bottomRowH = 100, bottomH = bottomRowH * 2 + 4;
   const taglineY = bottomY + bottomH + 44;
   const H = taglineY + 26;
-  return { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomH, taglineY };
+  return { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomRowH, bottomH, taglineY };
 }
 // Derives 2–3 letter initials from SHARE_BRAND for the decorative watermark
 // mark (e.g. "DR. JOURNAL" → "DJ") — used in the header and footer.
@@ -2862,7 +2871,7 @@ function drawShareChartCrop(ctx, img, x, y, w, h, zoom, offsetXFrac, offsetYFrac
 // Core draw routine, shared by the live chart-crop preview (small canvas,
 // chart region only) and the full card export (whole layout) — see below.
 function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
-  const { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomH, taglineY } = layout;
+  const { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomRowH, bottomH, taglineY } = layout;
   const fees = parseFloat(trade.fees) || 0;
   const netPnl = trade.pnl - fees;
   const pnlColor = trade.outcome === "BE" ? "#FFD400" : netPnl >= 0 ? "#A1E503" : "#FF2965";
@@ -2980,32 +2989,44 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
   roundRectPath(ctx, pad, chartY, W - pad * 2, chartH, 18); ctx.stroke();
   ctx.restore();
 
-  // ── Bottom stats bar — Direction / Session / Setup / Symbol, 4 columns ──
+  // ── Bottom stats bar — row 1: Direction/Session/Setup/Symbol; row 2: Entry/Exit/Time in Trade ──
   ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5;
   roundRectPath(ctx, pad, bottomY, W - pad * 2, bottomH, 18); ctx.stroke();
+  ctx.strokeStyle = "#ffffff16"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad + 18, bottomY + bottomRowH + 2); ctx.lineTo(W - pad - 18, bottomY + bottomRowH + 2); ctx.stroke();
 
-  const rows = [
+  function drawStatColumns(rows, rowY, rowH) {
+    const colW = (W - pad * 2) / rows.length, iconBoxSize = 42;
+    rows.forEach(([icon, color, label, value], i) => {
+      const colX = pad + colW * i;
+      if (i > 0) { ctx.strokeStyle = "#ffffff16"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(colX, rowY + 14); ctx.lineTo(colX, rowY + rowH - 14); ctx.stroke(); }
+      const iconX = colX + 22, iconCy = rowY + rowH / 2;
+      ctx.fillStyle = color + "1a"; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 11); ctx.fill();
+      ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 11); ctx.stroke();
+      drawStatIcon(ctx, iconX + iconBoxSize / 2, iconCy, 16, icon, color);
+      const textX = iconX + iconBoxSize + 15, textMaxW = colW - (iconBoxSize + 22 + 18);
+      ctx.textAlign = "left"; ctx.fillStyle = "#6b7488"; ctx.font = "700 11.5px Inter, sans-serif";
+      ctx.fillText(label, textX, iconCy - 8);
+      ctx.fillStyle = "#eef0f5"; ctx.font = "800 17px Inter, sans-serif";
+      let val = String(value);
+      while (ctx.measureText(val).width > textMaxW && val.length > 3) val = val.slice(0, -2) + "…";
+      ctx.fillText(val, textX, iconCy + 16);
+    });
+  }
+
+  drawStatColumns([
     ["direction-" + (isLong ? "long" : "short"), dirColor, "DIRECTION", (trade.direction || "—").toUpperCase()],
     ["session", "#c9a9ff", "SESSION", (trade.session || "—").toUpperCase()],
     ["setup", "#FFD400", "SETUP", trade.setup || "—"],
     ["symbol", "#A1E503", "SYMBOL", (trade.symbol || "—").toUpperCase()],
-  ];
-  const colW = (W - pad * 2) / 4, iconBoxSize = 46;
-  rows.forEach(([icon, color, label, value], i) => {
-    const colX = pad + colW * i;
-    if (i > 0) { ctx.strokeStyle = "#ffffff16"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(colX, bottomY + 18); ctx.lineTo(colX, bottomY + bottomH - 18); ctx.stroke(); }
-    const iconX = colX + 22, iconCy = bottomY + bottomH / 2;
-    ctx.fillStyle = color + "1a"; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.fill();
-    ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 12); ctx.stroke();
-    drawStatIcon(ctx, iconX + iconBoxSize / 2, iconCy, 18, icon, color);
-    const textX = iconX + iconBoxSize + 16, textMaxW = colW - (iconBoxSize + 22 + 20);
-    ctx.textAlign = "left"; ctx.fillStyle = "#6b7488"; ctx.font = "700 12px Inter, sans-serif";
-    ctx.fillText(label, textX, iconCy - 8);
-    ctx.fillStyle = "#eef0f5"; ctx.font = "800 18px Inter, sans-serif";
-    let val = String(value);
-    while (ctx.measureText(val).width > textMaxW && val.length > 3) val = val.slice(0, -2) + "…";
-    ctx.fillText(val, textX, iconCy + 17);
-  });
+  ], bottomY, bottomRowH);
+
+  const holdMins = holdMinutes(trade);
+  drawStatColumns([
+    ["entry", "#00E5FF", "ENTRY PRICE", trade.entry ? `$${trade.entry.toLocaleString()}` : "—"],
+    ["exit", "#FF9A3D", "EXIT PRICE", trade.exit ? `$${trade.exit.toLocaleString()}` : "—"],
+    ["duration", "#A1E503", "TIME IN TRADE", fmtMin(holdMins)],
+  ], bottomY + bottomRowH + 4, bottomRowH);
 
   // Bottom tagline
   ctx.font = "700 15px Inter, sans-serif"; ctx.fillStyle = "#A1E503bb"; ctx.textAlign = "center";
