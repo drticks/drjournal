@@ -2,14 +2,17 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { supabase } from "./supabaseClient";
 import { loadCloudStateWithRetry, saveCloudState, flushCloudStateSync, getLocalCache, getSnapshots, hasRealData, onSyncStatusChange } from "./lib/cloudSync";
 import logoUrl from "./logo.png";
+import logoUrlDay from "./logo2.png";
 
 // ─── THEME — DR. JOURNAL (Neon) ─────────────────────────────────────────────────
 // C is intentionally a single mutable object — every component reads C.xxx at
 // render time, so mutating its properties (via applyTheme) re-colors the whole
 // app without needing to thread theme through every component as a prop.
 // Palette locked to the Dr. Journal brand marks: #A1E503 (neon green), #000000
-// (black), #FEFEFE (white) — there is no theme picker anymore, this is the
-// only look the app has.
+// (black), #FEFEFE (white). There's one accent (Neon), but it now comes in a
+// Night (black/white) and Day (white/near-black) variant — C.logoUrl also
+// switches with mode, since Day mode uses a separate logo asset (logo2.png)
+// designed to sit on a light background.
 const C = {
   bg: "#000000", surface: "#0A0A0A", surfaceHigh: "#1A1A1A",
   border: "#242424", borderLight: "#333333",
@@ -21,13 +24,31 @@ const C = {
   blue: "#00E5FF", blueDim: "#00E5FF22",
   text: "#FEFEFE", textMuted: "#A6A6A6", textDim: "#6E6E6E",
   sidebar: "#000000",
+  logoUrl,
 };
 
-// Single neon-black base — no day mode, no alternate palettes.
-const NEON_BASE = { bg: "#000000", surface: "#0A0A0A", surfaceHigh: "#1A1A1A", border: "#242424", borderLight: "#333333", text: "#FEFEFE", textMuted: "#A6A6A6", textDim: "#6E6E6E", sidebar: "#000000" };
+// Night — black background, white text, full-brightness neon semantic colors.
+const NIGHT_BASE = {
+  bg: "#000000", surface: "#0A0A0A", surfaceHigh: "#1A1A1A", border: "#242424", borderLight: "#333333",
+  text: "#FEFEFE", textMuted: "#A6A6A6", textDim: "#6E6E6E", sidebar: "#000000",
+  purple: "#B026FF", purpleDim: "#B026FF1f", red: "#FF2965", redDim: "#FF296522",
+  yellow: "#FFD400", yellowDim: "#FFD40022", blue: "#00E5FF", blueDim: "#00E5FF22",
+  logoUrl,
+};
+// Day — soft off-white background, dark (near-black) text, and deeper/more
+// saturated versions of the semantic colors so red/yellow/blue/purple keep
+// enough contrast against a light background (the night versions are tuned
+// to glow on black and wash out on white).
+const DAY_BASE = {
+  bg: "#F6F8F2", surface: "#FFFFFF", surfaceHigh: "#EDF1E7", border: "#DCE3D2", borderLight: "#C7D0BB",
+  text: "#12160F", textMuted: "#565F51", textDim: "#828C7C", sidebar: "#FFFFFF",
+  purple: "#7A1FCC", purpleDim: "#7A1FCC1f", red: "#D6003C", redDim: "#D6003C1a",
+  yellow: "#9C7300", yellowDim: "#9C73001a", blue: "#0088B3", blueDim: "#0088B31a",
+  logoUrl: logoUrlDay,
+};
 
 const THEMES = {
-  "Neon": { base: NEON_BASE, accent: "#A1E503", accentHover: "#8CCB02", accent2: "#39FF9E", accent2Hover: "#22D983" },
+  "Neon": { accent: "#A1E503", accentHover: "#8CCB02", accent2: "#39FF9E", accent2Hover: "#22D983" },
 };
 
 // Gradient wordmark style (neon green → spring green), matching the Dr. Journal logo.
@@ -40,9 +61,9 @@ const gradientTextStyle = () => ({
   backgroundClip: "text",
 });
 
-function applyTheme(_themeName, _mode, transparency = 0, popupTransparency = 0) {
+function applyTheme(_themeName, mode = "night", transparency = 0, popupTransparency = 0) {
   const theme = THEMES["Neon"];
-  const base = NEON_BASE;
+  const base = mode === "day" ? DAY_BASE : NIGHT_BASE;
   Object.assign(C, base, theme, { accentDim: theme.accent + "22", accent2Dim: theme.accent2 + "22" });
   // Interface Transparency (Settings → adjustable 0–90): 0 = fully solid
   // panels, 90 = nearly invisible. Cards and their sub-panels (surfaceHigh)
@@ -88,7 +109,7 @@ function buildGlobalCSS() {
   .btn-teal-outline{
     background:${C.bg};
     border:1.5px solid #A1E50366;
-    color:#FEFEFE;
+    color:${C.text};
   }
   .btn-teal-outline:hover{
     background:#A1E50314;
@@ -1203,7 +1224,7 @@ function AuthScreen({ state, dispatch }) {
       <div style={{ width: "100%", maxWidth: 440 }} className="fade-in">
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ display: "inline-flex", padding: 6, borderRadius: 30, background: `linear-gradient(140deg, ${C.accent}55, transparent 60%)` }}>
-            <img src={logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 128, height: 128, borderRadius: 24, objectFit: "cover", display: "block" }} />
+            <img src={C.logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 128, height: 128, borderRadius: 24, objectFit: "cover", display: "block" }} />
           </div>
         </div>
         <Card style={{ padding: 32 }}>
@@ -1779,7 +1800,7 @@ function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
       {mobileNavOpen && <div className="sidebar-scrim" onClick={onClose} />}
       <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ width: 232, minWidth: 232, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", height: "100%" }}>
         <div style={{ padding: "18px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <img src={logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", boxShadow: `0 0 0 1px ${C.border}, 0 0 14px ${C.accent}33`, flexShrink: 0 }} />
+          <img src={C.logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", boxShadow: `0 0 0 1px ${C.border}, 0 0 14px ${C.accent}33`, flexShrink: 0 }} />
           <button onClick={onClose} className="sidebar-close-btn" style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer", display: "none" }}>×</button>
         </div>
         <div style={{ padding: "12px 8px", flex: 1, overflowY: "auto" }}>
@@ -3454,7 +3475,7 @@ function PublicTradeView({ id }) {
     <div style={{ minHeight: "100vh", background: C.bg, padding: 28, maxWidth: 680, margin: "0 auto" }}>
       {lightboxIndex !== null && <ImageLightbox images={shotUrls} labels={shotLabels} index={lightboxIndex} onClose={() => setLightboxIndex(null)} onNavigate={setLightboxIndex} />}
       <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <img src={logoUrl} alt="" style={{ width: 44, height: 44, borderRadius: 12, marginBottom: 8, objectFit: "cover" }} />
+        <img src={C.logoUrl} alt="" style={{ width: 44, height: 44, borderRadius: 12, marginBottom: 8, objectFit: "cover" }} />
         <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, fontFamily: "'Inter', sans-serif" }}>DR. JOURNAL</div>
         <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 3, textTransform: "uppercase" }}>Shared Trade</div>
       </div>
@@ -8535,6 +8556,8 @@ function Settings({ state, dispatch }) {
     notify("✓ Password updated.");
   };
 
+  const theme = state.theme || { name: "Neon", mode: "night" };
+  const setThemeMode = (mode) => dispatch({ type: "SET_THEME", theme: { mode } });
   const saveSiteName = () => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; } dispatch({ type: "SET_SITE_NAME", name: siteNameInput.trim() || "DR. JOURNAL" }); };
   const handleWatermarkUpload = (file) => {
     if (!file) return;
@@ -8789,16 +8812,21 @@ function Settings({ state, dispatch }) {
 
       <Card>
         <SectionLabel>Theme</SectionLabel>
-        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>DR. JOURNAL runs one locked-in neon theme built from the brand mark — no picker, no light mode.</div>
-        <div style={{ border: `2px solid ${C.accent}`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, background: C.accent + "0f", maxWidth: 460 }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            <div style={{ width: 26, height: 26, borderRadius: "50%", background: C.accent, boxShadow: `0 0 10px ${C.accent}88` }} />
-            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#000000", border: `1px solid ${C.border}` }} />
-            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#FEFEFE" }} />
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>DR. JOURNAL runs one accent (Neon), in a Night or Day variant — colors and the logo switch together.</div>
+        <div style={{ display: "flex", borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, maxWidth: 460 }}>
+          <div onClick={() => setThemeMode("night")} style={{ flex: 1, padding: "18px 0", textAlign: "center", cursor: "pointer", background: theme.mode !== "day" ? C.accentDim : "transparent", borderRight: `1px solid ${C.border}` }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: 5, marginBottom: 10 }}>
+              <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#000000", border: `1px solid ${C.border}` }} />
+              <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.accent, boxShadow: theme.mode !== "day" ? `0 0 8px ${C.accent}88` : "none" }} />
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: theme.mode !== "day" ? C.accent : C.textMuted }}>🌙 Night</div>
           </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>Neon</div>
-            <div style={{ fontSize: 11, color: C.textDim }}>#A1E503 · #000000 · #FEFEFE</div>
+          <div onClick={() => setThemeMode("day")} style={{ flex: 1, padding: "18px 0", textAlign: "center", cursor: "pointer", background: theme.mode === "day" ? C.accentDim : "transparent" }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: 5, marginBottom: 10 }}>
+              <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#FEFEFE", border: `1px solid ${C.border}` }} />
+              <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.accent, boxShadow: theme.mode === "day" ? `0 0 8px ${C.accent}88` : "none" }} />
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: theme.mode === "day" ? C.accent : C.textMuted }}>☀️ Day</div>
           </div>
         </div>
       </Card>
@@ -8839,7 +8867,7 @@ function Settings({ state, dispatch }) {
         </div>
         {(() => {
           const activeMode = state.watermark?.mode || (state.watermark?.dataUrl ? "custom" : "spade");
-          const previewSrc = activeMode === "logo" ? logoUrl : activeMode === "custom" ? state.watermark?.dataUrl : null;
+          const previewSrc = activeMode === "logo" ? C.logoUrl : activeMode === "custom" ? state.watermark?.dataUrl : null;
           return previewSrc ? (
             <div style={{ marginTop: 14, width: 140, height: 90, borderRadius: 8, border: `1px solid ${C.border}`, backgroundImage: `url(${previewSrc})`, backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundColor: C.bg }} />
           ) : (
@@ -9431,7 +9459,7 @@ export default function App() {
   const watermark = state.watermark;
   const currentNav = NAV.find(n => n.id === page) || (page === "import" ? { icon: <NavIcon name="import" />, label: "Import Trades" } : page === "settings" ? { icon: <NavIcon name="settings" />, label: "Settings" } : null);
   const watermarkMode = watermark?.mode || (watermark?.dataUrl ? "custom" : "spade");
-  const watermarkImgSrc = watermarkMode === "logo" ? logoUrl : watermarkMode === "custom" ? watermark?.dataUrl : null;
+  const watermarkImgSrc = watermarkMode === "logo" ? C.logoUrl : watermarkMode === "custom" ? watermark?.dataUrl : null;
 
   return (
     <>
