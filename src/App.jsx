@@ -274,6 +274,7 @@ const NAV_ICON_PATHS = {
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z" /></>,
   sun: <><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.4M12 19.1v2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7" /></>,
   moon: <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z" />,
+  calendar: <><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9.5h18" /><path d="M8 2.5v4M16 2.5v4" /></>,
 };
 const NavIcon = ({ name, size = 16, color = "currentColor" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -586,6 +587,22 @@ async function createShareLink(trade) {
 
 async function fetchSharedTrade(id) {
   const { data, error } = await supabase.from("shared_trades").select("data").eq("id", id).single();
+  if (error) return null;
+  return data.data;
+}
+
+// Month calendar share — stores per-day aggregates only (P&L, trade count,
+// win %), not full trade records (no notes/screenshots), since the calendar
+// view never needed that detail and it keeps the shared payload small and
+// private-by-default.
+async function createMonthShareLink(monthPayload) {
+  const id = shortId();
+  const { error } = await supabase.from("shared_months").insert({ id, data: monthPayload });
+  if (error) throw error;
+  return `${window.location.origin}${window.location.pathname}#sharemonth=${id}`;
+}
+async function fetchSharedMonth(id) {
+  const { data, error } = await supabase.from("shared_months").select("data").eq("id", id).single();
   if (error) return null;
   return data.data;
 }
@@ -2854,6 +2871,14 @@ function drawStatIcon(ctx, cx, cy, r, type, color) {
   } else if (type === "duration") {
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.85, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - r * 0.55); ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.42, cy + r * 0.14); ctx.stroke();
+  } else if (type === "percent") {
+    ctx.beginPath(); ctx.arc(cx - r * 0.42, cy - r * 0.42, r * 0.24, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx + r * 0.42, cy + r * 0.42, r * 0.24, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.7, cy + r * 0.7); ctx.lineTo(cx + r * 0.7, cy - r * 0.7); ctx.stroke();
+  } else if (type === "calendar") {
+    ctx.strokeRect(cx - r * 0.82, cy - r * 0.62, r * 1.64, r * 1.44);
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.82, cy - r * 0.16); ctx.lineTo(cx + r * 0.82, cy - r * 0.16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.4, cy - r * 0.9); ctx.lineTo(cx - r * 0.4, cy - r * 0.42); ctx.moveTo(cx + r * 0.4, cy - r * 0.9); ctx.lineTo(cx + r * 0.4, cy - r * 0.42); ctx.stroke();
   } else { // outcome-be
     ctx.beginPath(); ctx.moveTo(cx - r * 0.38, cy); ctx.lineTo(cx + r * 0.38, cy); ctx.stroke();
   }
@@ -3092,6 +3117,213 @@ async function renderShareCardPNG(trade, screenshotUrl, frame) {
   return new Promise(resolve => canvas.toBlob(resolve, "image/png"));
 }
 
+// ─── MONTH CALENDAR SHARE CARD ───────────────────────────────────────────────
+// Same brand chrome as the single-trade card (header, HUD corners, footer
+// tagline) around a rendered month calendar grid instead of a chart image —
+// no chart/frame step needed since there's no screenshot to crop.
+function shareMonthCardLayout(weekRowCount) {
+  const W = SHARE_CARD_W, outerPad = 18, pad = 56;
+  const headerY = pad + 6, headerH = 78;
+  const heroY = headerY + headerH + 30, heroH = 108;
+  const statsBarY = heroY + heroH + 18, statsBarH = 100;
+  const calLabelH = 36;
+  const calY = statsBarY + statsBarH + 30 + calLabelH;
+  const dowH = 40, cellGap = 8, cellH = 84;
+  const calGridH = dowH + cellGap + weekRowCount * cellH + (weekRowCount - 1) * cellGap;
+  const calH = calGridH + 28;
+  const taglineY = calY + calH + 46;
+  const H = taglineY + 26;
+  return { W, H, pad, outerPad, headerY, headerH, heroY, heroH, statsBarY, statsBarH, calLabelH, calY, calH, dowH, cellGap, cellH, taglineY };
+}
+
+function drawMonthShareCard(ctx, layout, monthData, logoImg) {
+  const { W, H, pad, outerPad, headerY, headerH, heroY, heroH, statsBarY, statsBarH, calLabelH, calY, calH, dowH, cellGap, cellH } = layout;
+  const { monthLabel, dateRange, accountLabel, netPnl, tradeCount, greenDays, redDays, cells } = monthData;
+  const pnlColor = netPnl > 0 ? "#A1E503" : netPnl < 0 ? "#FF2965" : "#FFD400";
+  const tradingDays = greenDays + redDays;
+  const dayWinPct = tradingDays ? Math.round((greenDays / tradingDays) * 100) : 0;
+  const initials = shareBrandInitials();
+  const bg = "#050505";
+
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(60, 20, 0, 60, 20, 460);
+  glow.addColorStop(0, pnlColor + "1c"); glow.addColorStop(1, "transparent");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+  // Outer framed-card border + HUD corner accents
+  ctx.save();
+  ctx.shadowColor = "#A1E50355"; ctx.shadowBlur = 26;
+  ctx.strokeStyle = "#A1E50399"; ctx.lineWidth = 2;
+  roundRectPath(ctx, outerPad, outerPad, W - outerPad * 2, H - outerPad * 2, 28); ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = "#A1E50355"; ctx.lineWidth = 1.5;
+  const chC = 26;
+  ctx.beginPath(); ctx.moveTo(W - outerPad - 210, outerPad + 18); ctx.lineTo(W - outerPad - chC, outerPad + 18); ctx.lineTo(W - outerPad - 2, outerPad + chC); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(outerPad + 2, H - outerPad - chC); ctx.lineTo(outerPad + chC, H - outerPad - 18); ctx.lineTo(outerPad + 150, H - outerPad - 18); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W - outerPad - 150, H - outerPad - 18); ctx.lineTo(W - outerPad - chC, H - outerPad - 18); ctx.lineTo(W - outerPad - 2, H - outerPad - chC); ctx.stroke();
+
+  // Header
+  ctx.save();
+  ctx.textAlign = "right"; ctx.fillStyle = "#ffffff08"; ctx.font = "800 128px Inter, sans-serif";
+  ctx.fillText(initials, W - pad, headerY + 92);
+  ctx.restore();
+
+  if (logoImg) {
+    ctx.strokeStyle = "#A1E503aa"; ctx.lineWidth = 2; roundRectPath(ctx, pad - 2, headerY - 2, 68, 68, 17); ctx.stroke();
+    ctx.save(); roundRectPath(ctx, pad, headerY, 64, 64, 16); ctx.clip();
+    drawShareChartCrop(ctx, logoImg, pad, headerY, 64, 64, 1, 0, 0);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = "#A1E503"; roundRectPath(ctx, pad, headerY, 64, 64, 16); ctx.fill();
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000000"; ctx.font = "800 24px Inter, sans-serif";
+    ctx.fillText(initials.slice(0, 2), pad + 32, headerY + 33);
+  }
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#f2f4f9"; ctx.font = "800 25px Inter, sans-serif";
+  ctx.fillText(SHARE_BRAND, pad + 80, headerY + 28);
+  ctx.fillStyle = "#8a93a8"; ctx.font = "500 17px Inter, sans-serif";
+  ctx.fillText(accountLabel || dateRange, pad + 80, headerY + 54);
+
+  ctx.font = "700 14px Inter, sans-serif";
+  const pillLabel = "M O N T H   S U M M A R Y";
+  const labelW = ctx.measureText(pillLabel).width;
+  const dotCx = W - pad - 8, dotCy = headerY + 20;
+  ctx.textAlign = "left"; ctx.fillStyle = pnlColor;
+  ctx.fillText(pillLabel, dotCx - 24 - labelW, dotCy + 5);
+  ctx.strokeStyle = pnlColor + "88"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(dotCx, dotCy, 7, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = pnlColor; ctx.beginPath(); ctx.arc(dotCx, dotCy, 3.4, 0, Math.PI * 2); ctx.fill();
+
+  // Hero — Month P&L (borderless, matching the trade card's P&L treatment)
+  ctx.textAlign = "left"; ctx.fillStyle = "#8a93a8"; ctx.font = "700 15px Inter, sans-serif";
+  ctx.fillText(monthLabel.toUpperCase(), pad, heroY + 22);
+  ctx.fillStyle = pnlColor; ctx.font = "800 62px Inter, sans-serif";
+  ctx.fillText(fmt$(netPnl), pad, heroY + 92);
+
+  // Stats bar — Trades / Green Days / Red Days / Win Rate, 4 columns
+  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5;
+  roundRectPath(ctx, pad, statsBarY, W - pad * 2, statsBarH, 18); ctx.stroke();
+  const statCols = [
+    ["symbol", "#00E5FF", "TRADES", String(tradeCount)],
+    ["outcome-win", "#A1E503", "GREEN DAYS", String(greenDays)],
+    ["outcome-loss", "#FF2965", "RED DAYS", String(redDays)],
+    ["percent", "#FFD400", "DAY WIN RATE", `${dayWinPct}%`],
+  ];
+  const colW = (W - pad * 2) / 4, iconBoxSize = 42;
+  statCols.forEach(([icon, color, label, value], i) => {
+    const colX = pad + colW * i;
+    if (i > 0) { ctx.strokeStyle = "#ffffff16"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(colX, statsBarY + 14); ctx.lineTo(colX, statsBarY + statsBarH - 14); ctx.stroke(); }
+    const iconX = colX + 22, iconCy = statsBarY + statsBarH / 2;
+    ctx.fillStyle = color + "1a"; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 11); ctx.fill();
+    ctx.strokeStyle = color + "55"; ctx.lineWidth = 1.5; roundRectPath(ctx, iconX, iconCy - iconBoxSize / 2, iconBoxSize, iconBoxSize, 11); ctx.stroke();
+    drawStatIcon(ctx, iconX + iconBoxSize / 2, iconCy, 16, icon, color);
+    const textX = iconX + iconBoxSize + 15;
+    ctx.textAlign = "left"; ctx.fillStyle = "#6b7488"; ctx.font = "700 11px Inter, sans-serif";
+    ctx.fillText(label, textX, iconCy - 8);
+    ctx.fillStyle = "#eef0f5"; ctx.font = "800 19px Inter, sans-serif";
+    ctx.fillText(value, textX, iconCy + 17);
+  });
+
+  // Calendar label
+  ctx.textAlign = "left"; ctx.fillStyle = "#A1E503"; ctx.font = "700 14px Inter, sans-serif";
+  const calTitleY = statsBarY + statsBarH + 30 + 24;
+  drawStatIcon(ctx, pad + 10, calTitleY - 5, 11, "calendar", "#A1E503");
+  ctx.fillText("M O N T H   C A L E N D A R", pad + 30, calTitleY);
+
+  // Calendar grid box
+  ctx.strokeStyle = "#A1E5034d"; ctx.lineWidth = 1.5;
+  roundRectPath(ctx, pad, calY, W - pad * 2, calH, 18); ctx.stroke();
+
+  const gridPad = 16, gridX = pad + gridPad, gridW = W - pad * 2 - gridPad * 2;
+  const dowLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const cellW = (gridW - cellGap * 6) / 7;
+  ctx.textAlign = "center"; ctx.font = "700 11px Inter, sans-serif"; ctx.fillStyle = "#6b7488";
+  dowLabels.forEach((d, i) => { ctx.fillText(d, gridX + cellW * i + cellW / 2, calY + gridPad + 24); });
+
+  const gridTop = calY + gridPad + dowH;
+  cells.forEach((row, ri) => {
+    row.forEach((c, ci) => {
+      const x = gridX + ci * (cellW + cellGap), y = gridTop + ri * (cellH + cellGap);
+      if (!c) { ctx.fillStyle = "#ffffff05"; roundRectPath(ctx, x, y, cellW, cellH, 10); ctx.fill(); return; }
+      const hasT = c.count > 0;
+      const cellColor = !hasT ? null : c.pnl >= 0 ? "#A1E503" : "#FF2965";
+      ctx.fillStyle = hasT ? cellColor + "1c" : "#ffffff08";
+      roundRectPath(ctx, x, y, cellW, cellH, 10); ctx.fill();
+      ctx.strokeStyle = hasT ? cellColor + "60" : "#ffffff14"; ctx.lineWidth = 1.2;
+      roundRectPath(ctx, x, y, cellW, cellH, 10); ctx.stroke();
+      ctx.textAlign = "right"; ctx.fillStyle = "#5b6478"; ctx.font = "600 11px Inter, sans-serif";
+      ctx.fillText(String(c.day), x + cellW - 8, y + 17);
+      if (hasT) {
+        ctx.textAlign = "center"; ctx.fillStyle = cellColor; ctx.font = "800 15px Inter, sans-serif";
+        const amt = `${c.pnl >= 0 ? "+" : "-"}$${Math.abs(Math.round(c.pnl))}`;
+        ctx.fillText(amt, x + cellW / 2, y + cellH / 2 + 8);
+        ctx.font = "600 10px Inter, sans-serif"; ctx.fillStyle = "#8a93a8";
+        ctx.fillText(`${c.count} trade${c.count !== 1 ? "s" : ""}`, x + cellW / 2, y + cellH - 12);
+      }
+    });
+  });
+
+  // Bottom tagline
+  const taglineText = "WINNER IS JUST A LOSER THAT TRIES ONE MORE TIME";
+  const taglineSpaced = taglineText.split("").map(c => c === " " ? "   " : c).join(" ");
+  const taglineMaxW = W - pad * 2 - 40;
+  let taglineSize = 15;
+  ctx.textAlign = "center"; ctx.fillStyle = "#A1E503bb";
+  ctx.font = `700 ${taglineSize}px Inter, sans-serif`;
+  while (ctx.measureText(taglineSpaced).width > taglineMaxW && taglineSize > 9) {
+    taglineSize -= 1; ctx.font = `700 ${taglineSize}px Inter, sans-serif`;
+  }
+  ctx.fillText(taglineSpaced, W / 2, layout.taglineY);
+}
+
+// Builds the compact per-day payload shared by the PNG renderer, the shared
+// link, and the public read-only view — one source of truth for "what a
+// month share contains."
+function buildMonthSharePayload(state, current) {
+  const { trades, activeAccount, accounts } = state;
+  const year = current.getFullYear(), month = current.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leading = new Date(year, month, 1).getDay();
+  const accTrades = trades.filter(t => activeAccount === "all" || t.account === activeAccount);
+  const toKey = (y, m, d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const dayCell = (d) => {
+    const key = toKey(year, month, d);
+    const dt = accTrades.filter(t => t.date.startsWith(key));
+    const fees = t => parseFloat(t.fees) || 0;
+    const pnl = dt.reduce((s, t) => s + (t.pnl - fees(t)), 0);
+    return { day: d, pnl, count: dt.length };
+  };
+  const flatCells = [];
+  for (let i = 0; i < leading; i++) flatCells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) flatCells.push(dayCell(d));
+  while (flatCells.length % 7 !== 0) flatCells.push(null);
+  const cells = [];
+  for (let i = 0; i < flatCells.length; i += 7) cells.push(flatCells.slice(i, i + 7));
+
+  const monthTrades = accTrades.filter(t => { const d = new Date(t.date); return d.getFullYear() === year && d.getMonth() === month; });
+  const stats = calcStats(monthTrades);
+  const dayPnls = cells.flat().filter(Boolean).filter(c => c.count > 0);
+  const greenDays = dayPnls.filter(c => c.pnl >= 0).length;
+  const redDays = dayPnls.filter(c => c.pnl < 0).length;
+  const accountLabel = activeAccount === "all" ? "All Accounts" : (accounts.find(a => a.id === activeAccount)?.name || "");
+
+  return {
+    monthLabel: current.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    dateRange: current.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    accountLabel, netPnl: stats.netPnl, tradeCount: monthTrades.length, greenDays, redDays, cells,
+  };
+}
+
+async function renderMonthShareCardPNG(monthPayload) {
+  if (document.fonts?.ready) { try { await document.fonts.ready; } catch {} }
+  const layout = shareMonthCardLayout(monthPayload.cells.length);
+  const canvas = document.createElement("canvas");
+  canvas.width = layout.W; canvas.height = layout.H;
+  const ctx = canvas.getContext("2d");
+  let logoImg = null;
+  try { logoImg = await loadImageFromURL(logoUrl); } catch { logoImg = null; }
+  drawMonthShareCard(ctx, layout, monthPayload, logoImg);
+  return new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+}
+
 // Step 1 of the image flow — pick which screenshot, its aspect, and its
 // crop/zoom. The chart-crop preview canvas uses the exact same
 // drawShareChartCrop() call the final export uses, just at a smaller size.
@@ -3301,7 +3533,116 @@ function ShareChooserModal({ trade, onClose, onPickImage, onPickLink }) {
   );
 }
 
-// ─── IMAGE LIGHTBOX (in-app viewer — avoids the data: URL new-tab block) ────
+// ─── MONTH CALENDAR SHARE FLOW ───────────────────────────────────────────────
+// Same idea as the single-trade share flow (chooser → image or link) but for
+// a whole month's calendar. No "frame your chart" step — there's no
+// screenshot to crop, so picking "Image for social" renders straight away.
+function MonthShareModal({ state, current, onClose }) {
+  const [step, setStep] = useState("chooser"); // chooser | generating | image | link
+  const [pngUrl, setPngUrl] = useState(null);
+  const [link, setLink] = useState(null);
+  const [linkError, setLinkError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const monthPayload = useMemo(() => buildMonthSharePayload(state, current), [state, current]);
+
+  const pickImage = async () => {
+    setStep("generating");
+    try {
+      const blob = await renderMonthShareCardPNG(monthPayload);
+      setPngUrl(URL.createObjectURL(blob));
+      setStep("image");
+    } catch { setStep("chooser"); }
+  };
+  const pickLink = async () => {
+    setStep("link"); setLinkError("");
+    try { setLink(await createMonthShareLink(monthPayload)); }
+    catch { setLinkError("Couldn't generate link. Try again."); }
+  };
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = pngUrl; a.download = `${monthPayload.monthLabel.replace(/\s+/g, "_")}_calendar.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  const copyImage = async () => {
+    try {
+      const res = await fetch(pngUrl); const blob = await res.blob();
+      await navigator.clipboard.write([new window.ClipboardItem({ "image/png": blob })]);
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
+    } catch { download(); }
+  };
+  const copyLink = () => { if (link) navigator.clipboard.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); };
+
+  if (step === "chooser") {
+    const tile = (Icon, iconColor, title, sub, onClick) => (
+      <button onClick={onClick} style={{
+        flex: 1, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+        padding: "22px 14px", borderRadius: 16, border: `1px solid ${C.border}`, background: C.surfaceHigh, color: C.text, cursor: "pointer", transition: "border-color 0.15s, background 0.15s",
+      }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = iconColor; e.currentTarget.style.background = iconColor + "10"; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.surfaceHigh; }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: iconColor + "1f", color: iconColor, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={20} /></div>
+        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{title}</div>
+        <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.4 }}>{sub}</div>
+      </button>
+    );
+    return (
+      <ShareStepChrome icon={<NavIcon name="calendar" size={18} />} title="Share Calendar" subtitle={`${monthPayload.monthLabel} — ${monthPayload.tradeCount} trade${monthPayload.tradeCount !== 1 ? "s" : ""}`} onClose={onClose} maxWidth={420}>
+        <div style={{ display: "flex", gap: 12 }}>
+          {tile(CameraIcon, C.accent, "Image for social", "A card you can post anywhere", pickImage)}
+          {tile(LinkIcon, C.blue, "Shareable link", "Anyone with the link can view it", pickLink)}
+        </div>
+      </ShareStepChrome>
+    );
+  }
+
+  if (step === "generating") {
+    return (
+      <ShareStepChrome icon={<CameraIcon />} title="Creating your calendar card…" onClose={onClose} maxWidth={420}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "34px 0" }}><SpadeLoader label="Rendering…" /></div>
+      </ShareStepChrome>
+    );
+  }
+
+  if (step === "image") {
+    return (
+      <ShareStepChrome icon={<span style={{ fontSize: 18 }}>✓</span>} title="Your card is ready" subtitle="Share it anywhere — download the file or copy it straight to your clipboard." onClose={onClose} maxWidth={400}
+        footer={<>
+          <Btn variant="ghost" onClick={() => setStep("chooser")} style={{ flex: 1, justifyContent: "center" }}>← Back</Btn>
+          <Btn onClick={download} style={{ flex: 1, justifyContent: "center" }}>⬇ Download</Btn>
+        </>}>
+        <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${C.accent}40`, boxShadow: `0 0 0 1px ${C.border}, 0 8px 24px #0007`, marginBottom: 14 }}>
+          <img src={pngUrl} style={{ width: "100%", display: "block" }} />
+        </div>
+        <Btn variant="tealOutline" onClick={copyImage} style={{ width: "100%", justifyContent: "center" }}>{copied ? "✓ Copied to clipboard!" : "📋 Copy Image"}</Btn>
+      </ShareStepChrome>
+    );
+  }
+
+  // link step
+  return (
+    <ShareStepChrome icon={<LinkIcon />} iconColor={C.blue} title="Shareable Link" subtitle="Anyone with this link can view your calendar — no account needed." onClose={onClose} maxWidth={460}>
+      {linkError ? (
+        <div style={{ color: C.red, fontSize: 13, marginBottom: 10 }}>{linkError} <span onClick={pickLink} style={{ color: C.accent, cursor: "pointer", fontWeight: 700 }}>Retry</span></div>
+      ) : (
+        <>
+          <div className="mono" style={{ background: C.bg, border: `1px solid ${C.accent}30`, borderRadius: 12, padding: "14px 16px", fontSize: 12, color: C.textMuted, wordBreak: "break-all", marginBottom: 14, lineHeight: 1.7 }}>{link || "Generating link…"}</div>
+          <Btn onClick={copyLink} disabled={!link} style={{ width: "100%", justifyContent: "center" }}>{copied ? "✓ Copied to clipboard!" : <><LinkIcon size={15} /> Copy Share Link</>}</Btn>
+        </>
+      )}
+      <div style={{ marginTop: 16, padding: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+        <SectionLabel>Month Summary</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {[["Month", monthPayload.monthLabel], ["Trades", monthPayload.tradeCount], ["Net P&L", fmt$(monthPayload.netPnl)], ["Green Days", monthPayload.greenDays], ["Red Days", monthPayload.redDays], ["Account", monthPayload.accountLabel || "—"]].map(([k, v]) => (
+            <div key={k}><span style={{ fontSize: 11, color: C.textDim }}>{k}: </span><span style={{ fontSize: 12, fontWeight: 600 }}>{v}</span></div>
+          ))}
+        </div>
+      </div>
+    </ShareStepChrome>
+  );
+}
+
+
 // images: array of URL strings. index: currently shown position. onNavigate(newIndex): called when user moves prev/next.
 function ImageLightbox({ images, index, onClose, onNavigate, labels, title = "Trade Screenshot" }) {
   const hasMultiple = Array.isArray(images) && images.length > 1;
@@ -3536,12 +3877,88 @@ function PublicTradeView({ id }) {
   );
 }
 
+// ─── PUBLIC MONTH VIEW (when URL has #sharemonth=...) ────────────────────────
+function PublicMonthView({ id }) {
+  const [month, setMonth] = useState(undefined); // undefined = loading, null = not found
+  useEffect(() => { fetchSharedMonth(id).then(setMonth); }, [id]);
+  if (month === undefined) return <SpadeLoader label="Loading shared calendar…" />;
+  if (!month) return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.red }}>Invalid or expired calendar link.</div>;
+  const { monthLabel, accountLabel, netPnl, tradeCount, greenDays, redDays, cells } = month;
+  const tradingDays = greenDays + redDays;
+  const dayWinPct = tradingDays ? Math.round((greenDays / tradingDays) * 100) : 0;
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, padding: 28, maxWidth: 760, margin: "0 auto" }}>
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <img src={C.logoUrl} alt="" style={{ width: 44, height: 44, borderRadius: 12, marginBottom: 8, objectFit: "cover" }} />
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, fontFamily: "'Inter', sans-serif" }}>DR. JOURNAL</div>
+        <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 3, textTransform: "uppercase" }}>Shared Calendar</div>
+      </div>
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{monthLabel}</div>
+          {accountLabel && <Badge color={C.blue}>{accountLabel}</Badge>}
+          <div style={{ flex: 1 }} />
+          <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: netPnl >= 0 ? C.accent : C.red }}>{fmt$(netPnl)}</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
+          {[["Trades", tradeCount], ["Green Days", greenDays], ["Red Days", redDays], ["Day Win Rate", `${dayWinPct}%`]].map(([k, v]) => (
+            <div key={k} style={{ background: C.surfaceHigh, borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{k}</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 6 }}>
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
+            <div key={d} style={{ textAlign: "center", fontSize: 11, color: C.textMuted, fontWeight: 700, padding: "8px 0", background: C.surfaceHigh, borderRadius: 8 }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {cells.map((row, ri) => (
+            <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+              {row.map((c, ci) => {
+                const hasT = c && c.count > 0;
+                const positive = hasT && c.pnl >= 0;
+                return (
+                  <div key={ci} style={{
+                    minHeight: 74, borderRadius: 10, padding: "8px 10px", boxSizing: "border-box",
+                    background: !c ? "transparent" : !hasT ? C.surfaceHigh : positive ? `${C.accent}1c` : `${C.red}1c`,
+                    border: !c ? "none" : `1px solid ${!hasT ? C.border : positive ? C.accent + "70" : C.red + "70"}`,
+                    display: "flex", flexDirection: "column", justifyContent: "space-between",
+                  }}>
+                    {c && <>
+                      <div style={{ fontSize: 10.5, color: C.textDim, fontWeight: 600, textAlign: "right" }}>{c.day}</div>
+                      {hasT && (
+                        <div>
+                          <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: positive ? C.accent : C.red }}>{positive ? "+" : "-"}${Math.abs(Math.round(c.pnl))}</div>
+                          <div style={{ fontSize: 9.5, color: C.textMuted }}>{c.count} trade{c.count !== 1 ? "s" : ""}</div>
+                        </div>
+                      )}
+                    </>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div style={{ textAlign: "center", marginTop: 24, fontSize: 12, color: C.textDim }}>Shared via DR. JOURNAL Trading Journal</div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD CALENDAR SECTION ──────────────────────────────────────────────
 function DashboardCalendarSection({ state, dispatch, onSelectTrade, setPage }) {
   const { trades, activeAccount } = state;
   const [current, setCurrent] = useState(new Date());
   const [popup, setPopup] = useState(null);
   const [hoverTradeId, setHoverTradeId] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     const onKey = e => { if (e.key === "Escape") setPopup(null); };
@@ -3593,7 +4010,10 @@ function DashboardCalendarSection({ state, dispatch, onSelectTrade, setPage }) {
         <span style={{ fontSize: 12, color: C.textMuted }}>Monthly stats:</span>
         <span className="mono" style={{ color: mStats.netPnl >= 0 ? C.accent : C.red, fontWeight: 800, fontSize: 15 }}>{mStats.netPnl >= 0 ? "+" : ""}{fmt$(mStats.netPnl).replace("+","").replace("-","")}</span>
         <Badge color={C.blue}>{tradingDays} days · {monthTrades.length} trades</Badge>
+        <Btn small variant="tealOutline" onClick={() => setShareOpen(true)}><LinkIcon size={13} /> Share</Btn>
       </div>
+
+      {shareOpen && <MonthShareModal state={state} current={current} onClose={() => setShareOpen(false)} />}
 
       {/* Calendar grid + week sidebar */}
       <div className="calendar-scroll" style={{ overflowX: "auto" }}>
@@ -3612,8 +4032,8 @@ function DashboardCalendarSection({ state, dispatch, onSelectTrade, setPage }) {
                 <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
                   {row.map((c, ci) => {
                     const dt = tradesForDate(c.dateObj);
-                    const pnl = dt.reduce((s, t) => s + t.pnl, 0);
-                    const wins = dt.filter(t => t.outcome === "Win" || (t.outcome !== "Loss" && t.outcome !== "BE" && t.pnl > 0)).length;
+                    const pnl = dt.reduce((s, t) => s + (t.pnl - (parseFloat(t.fees) || 0)), 0);
+                    const wins = dt.filter(t => t.outcome === "Win" || (t.outcome !== "Loss" && t.outcome !== "BE" && (t.pnl - (parseFloat(t.fees) || 0)) > 0)).length;
                     const decided = dt.filter(t => t.outcome !== "BE").length;
                     const winPct = decided ? Math.round((wins / decided) * 100) : null;
                     const isToday = c.dateObj.toDateString() === new Date().toDateString();
@@ -9373,6 +9793,19 @@ export default function App() {
           <PlanAnnouncementBanner />
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
            <PublicTradeView id={hash.slice(7)} />
+          </div>
+        </div>
+      </>
+    );
+  }
+  if (hash.startsWith("#sharemonth=")) {
+    return (
+      <>
+        <style>{buildGlobalCSS()}</style>
+        <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+          <PlanAnnouncementBanner />
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+           <PublicMonthView id={hash.slice(12)} />
           </div>
         </div>
       </>
