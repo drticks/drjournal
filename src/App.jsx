@@ -272,6 +272,8 @@ const NAV_ICON_PATHS = {
   livecapital: <><rect x="2" y="6" width="20" height="14" rx="2.5" /><path d="M2 10h20" /><circle cx="17" cy="15" r="1.4" fill="currentColor" stroke="none" /></>,
   import: <><path d="M12 3v13" /><path d="m7 11 5 5 5-5" /><path d="M4 21h16" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z" /></>,
+  sun: <><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.4M12 19.1v2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7" /></>,
+  moon: <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z" />,
 };
 const NavIcon = ({ name, size = 16, color = "currentColor" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -1601,10 +1603,23 @@ function PnlModeToggle({ state, dispatch }) {
   });
   return (
     <div title="Show trade P&L in $ or %" style={{ position: "relative", display: "flex", gap: 3, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3, flexShrink: 0 }}>
-      <span style={{ position: "absolute", top: -8, right: -6, background: C.accent, color: "#001018", fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 20, letterSpacing: 0.3, whiteSpace: "nowrap" }}>NEW!</span>
       <button onClick={() => setMode("money")} style={btnStyle(mode === "money")}>$</button>
       <button onClick={() => setMode("percent")} style={btnStyle(mode === "percent")}>%</button>
     </div>
+  );
+}
+
+// Compact header toggle — shows the icon for the mode you're currently in
+// (moon = Night, sun = Day); one click flips it. Lives where the $/% P&L
+// toggle used to sit; that control moved into Settings → Appearance.
+function ThemeModeToggle({ state, dispatch }) {
+  const mode = state.theme?.mode || "night";
+  const toggle = () => dispatch({ type: "SET_THEME", theme: { mode: mode === "day" ? "night" : "day" } });
+  return (
+    <button title={mode === "day" ? "Switch to Night mode" : "Switch to Day mode"} onClick={toggle}
+      style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.accent, width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <NavIcon name={mode === "day" ? "sun" : "moon"} size={16} />
+    </button>
   );
 }
 
@@ -1707,7 +1722,7 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
         )}
       </div>
 
-      <PnlModeToggle state={state} dispatch={dispatch} />
+      <ThemeModeToggle state={state} dispatch={dispatch} />
 
       <SyncBadge status={syncStatus} />
 
@@ -8832,6 +8847,12 @@ function Settings({ state, dispatch }) {
       </Card>
 
       <Card>
+        <SectionLabel>P&amp;L Display</SectionLabel>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Show each trade's P&amp;L in dollars or as a % return. Used across Trades, Dashboard, and trade detail.</div>
+        <PnlModeToggle state={state} dispatch={dispatch} />
+      </Card>
+
+      <Card>
         <SectionLabel>Contact &amp; Follow</SectionLabel>
         <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Questions, access requests, or feedback — reach out or follow along.</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", maxWidth: 460 }}>
@@ -9494,7 +9515,7 @@ export default function App() {
               <button onClick={() => setMobileNavOpen(true)} aria-label="Open menu" style={{ background: "none", border: "none", color: C.text, fontSize: 22, cursor: "pointer", padding: "4px 6px" }}>☰</button>
               <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}><span>{currentNav?.icon}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentNav?.label}</span></div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                <PnlModeToggle state={state} dispatch={dispatch} />
+                <ThemeModeToggle state={state} dispatch={dispatch} />
                 <SyncBadge status={syncStatus} />
                 <button className="btn-teal-outline" onClick={() => openAddTrade(state, dispatch)} style={{ fontWeight: 700, fontSize: 13, borderRadius: 8, padding: "6px 12px" }}>+ Trade</button>
               </div>
