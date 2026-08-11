@@ -3028,9 +3028,18 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
     ["duration", "#A1E503", "TIME IN TRADE", fmtMin(holdMins)],
   ], bottomY + bottomRowH + 4, bottomRowH);
 
-  // Bottom tagline
-  ctx.font = "700 15px Inter, sans-serif"; ctx.fillStyle = "#A1E503bb"; ctx.textAlign = "center";
-  ctx.fillText("O N E   T R A D E   N E V E R   M A K E S   A   T R A D E R", W / 2, taglineY);
+  // Bottom tagline — auto-shrinks to fit the card width since letter-spaced
+  // taglines can run long.
+  const taglineText = "WINNER IS JUST A LOSER THAT TRIES ONE MORE TIME";
+  const taglineSpaced = taglineText.split("").map(c => c === " " ? "   " : c).join(" ");
+  const taglineMaxW = W - pad * 2 - 40;
+  let taglineSize = 15;
+  ctx.textAlign = "center"; ctx.fillStyle = "#A1E503bb";
+  ctx.font = `700 ${taglineSize}px Inter, sans-serif`;
+  while (ctx.measureText(taglineSpaced).width > taglineMaxW && taglineSize > 9) {
+    taglineSize -= 1; ctx.font = `700 ${taglineSize}px Inter, sans-serif`;
+  }
+  ctx.fillText(taglineSpaced, W / 2, taglineY);
 }
 
 async function renderShareCardPNG(trade, screenshotUrl, frame) {
