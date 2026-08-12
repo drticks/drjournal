@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./supabaseClient";
 import { loadCloudStateWithRetry, saveCloudState, flushCloudStateSync, getLocalCache, getSnapshots, hasRealData, onSyncStatusChange } from "./lib/cloudSync";
 import logoUrl from "./logo.png";
@@ -3343,7 +3344,15 @@ const LinkIcon = ({ size = 20, color = "currentColor" }) => (
   </svg>
 );
 function ShareStepChrome({ icon, iconColor, title, subtitle, step, totalSteps, onClose, maxWidth = 480, children, footer }) {
-  return (
+  // Portaled to <body> — this modal gets triggered from deep inside scrolling
+  // page content (e.g. the Calendar section, itself inside Dashboard's own
+  // scroll container). Rendering it in place and relying on `position: fixed`
+  // is unreliable there — some browsers treat a scrolling ancestor as the
+  // containing block for fixed descendants, so the popup ends up positioned
+  // relative to that container's scroll position instead of the real
+  // viewport. A portal sidesteps that by mounting the DOM node directly on
+  // <body>, guaranteeing it's always centered in the actual viewport.
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && onClose && onClose()}>
       <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 20, padding: 0, width: "100%", maxWidth, maxHeight: "92vh", overflowY: "auto", boxShadow: `0 0 0 1px ${C.accent}22, 0 20px 60px #000a` }}>
         <div style={{ padding: "22px 24px 0" }}>
@@ -3366,7 +3375,8 @@ function ShareStepChrome({ icon, iconColor, title, subtitle, step, totalSteps, o
         <div style={{ padding: "0 24px 22px" }}>{children}</div>
         {footer && <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10 }}>{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
