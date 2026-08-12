@@ -1556,17 +1556,32 @@ function PreparationPage({ state, dispatch }) {
 
 // ─── ECONOMIC CALENDAR / NEWS ────────────────────────────────────────────────
 // Embeds TradingView's free Economic Calendar widget (no API key needed) —
-// filtered to medium + high impact events (the "orange/red folder" news
-// traders actually care about: CPI, FOMC, NFP, PPI, rate decisions, etc.).
-// It's a live third-party embed, so it re-mounts the widget script whenever
-// the container is (re)rendered or the color theme changes.
+// filtered to the impact levels traders care about (CPI, FOMC, NFP, PPI, rate
+// decisions, etc). The widget renders in a cross-origin iframe, so its event
+// rows always use TradingView's own dark/light palette — that part can't be
+// recolored to the brand green. Everything around it (header, filter pills,
+// legend, frame, loading state) is fully themed to match the rest of the app.
+const NEWS_IMPACT_OPTIONS = [
+  { id: "high", label: "High Only", value: "1" },
+  { id: "highmed", label: "High + Medium", value: "0,1" },
+  { id: "all", label: "All", value: "-1,0,1" },
+];
+const NEWS_REGION_OPTIONS = [
+  { id: "major", label: "Major Economies", value: "us,eu,gb,jp,ca,au,cn,de,fr,ch,nz" },
+  { id: "us", label: "US Only", value: "us" },
+  { id: "all", label: "All Countries", value: "" },
+];
 function EconomicCalendarPage({ state }) {
   const containerRef = useRef(null);
+  const [loaded, setLoaded] = useState(false);
+  const [impact, setImpact] = useState("highmed");
+  const [region, setRegion] = useState("major");
   const mode = state.theme?.mode === "day" ? "light" : "dark";
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    setLoaded(false);
     el.innerHTML = "";
     const widgetDiv = document.createElement("div");
     widgetDiv.className = "tradingview-widget-container__widget";
@@ -1575,29 +1590,58 @@ function EconomicCalendarPage({ state }) {
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-events.js";
     script.type = "text/javascript";
     script.async = true;
+    script.onload = () => setLoaded(true);
     script.innerHTML = JSON.stringify({
       colorTheme: mode,
       isTransparent: true,
       width: "100%",
       height: "680",
       locale: "en",
-      importanceFilter: "0,1",
-      countryFilter: "us,eu,gb,jp,ca,au,cn,de,fr,ch,nz",
+      importanceFilter: NEWS_IMPACT_OPTIONS.find(o => o.id === impact)?.value || "0,1",
+      countryFilter: NEWS_REGION_OPTIONS.find(o => o.id === region)?.value || "",
     });
     el.appendChild(script);
-  }, [mode]);
+    // The script itself loads fast; the iframe it injects takes a beat longer,
+    // so also clear the skeleton on a short timer as a fallback.
+    const t = setTimeout(() => setLoaded(true), 1800);
+    return () => clearTimeout(t);
+  }, [mode, impact, region]);
+
+  const PillGroup = ({ options, active, onChange }) => (
+    <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 4 }}>
+      {options.map(o => (
+        <button key={o.id} onClick={() => onChange(o.id)} style={{
+          padding: "7px 14px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
+          background: active === o.id ? C.accent : "transparent", color: active === o.id ? "#000" : C.textMuted,
+        }}>{o.label}</button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
-      <PageHeader title="Economic Calendar" subtitle="Medium and high-impact news — CPI, FOMC, NFP, PPI, rate decisions, and more." />
-      <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
-        <Badge color={C.red}>● High Impact</Badge>
-        <Badge color={C.yellow}>● Medium Impact</Badge>
-        <div style={{ fontSize: 12, color: C.textDim }}>Live data via TradingView — times shown in your local timezone.</div>
+      <PageHeader title="Economic Calendar" subtitle="High and medium-impact news — CPI, FOMC, NFP, PPI, rate decisions, and more." actions={
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <PillGroup options={NEWS_IMPACT_OPTIONS} active={impact} onChange={setImpact} />
+          <PillGroup options={NEWS_REGION_OPTIONS} active={region} onChange={setRegion} />
+        </div>
+      } />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.textMuted }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: C.red, boxShadow: `0 0 6px ${C.red}` }} /> High Impact</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.textMuted }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: C.yellow, boxShadow: `0 0 6px ${C.yellow}` }} /> Medium Impact</div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 11.5, color: C.textDim }}>Live data via TradingView · times shown in your local timezone</div>
       </div>
-      <Card style={{ padding: 12, minHeight: 700 }}>
+
+      <div style={{ position: "relative", borderRadius: 20, border: `1px solid ${C.accent}40`, boxShadow: `0 0 0 1px ${C.border}, 0 0 30px ${C.accent}14`, padding: 14, background: C.surface, minHeight: 700 }}>
+        {!loaded && (
+          <div style={{ position: "absolute", inset: 14, display: "flex", alignItems: "center", justifyContent: "center", background: C.surface, borderRadius: 12, zIndex: 2 }}>
+            <SpadeLoader label="Loading economic calendar…" />
+          </div>
+        )}
         <div ref={containerRef} className="tradingview-widget-container" style={{ minHeight: 680 }} />
-      </Card>
+      </div>
     </div>
   );
 }
