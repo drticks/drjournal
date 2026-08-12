@@ -276,6 +276,7 @@ const NAV_ICON_PATHS = {
   sun: <><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.4M12 19.1v2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7" /></>,
   moon: <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z" />,
   calendar: <><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9.5h18" /><path d="M8 2.5v4M16 2.5v4" /></>,
+  news: <><rect x="3" y="5" width="14" height="15" rx="1.5" /><path d="M17 8h3a1 1 0 0 1 1 1v9.5a1.5 1.5 0 0 1-3 0V8Z" /><path d="M6.5 8.5h7M6.5 11.5h7M6.5 14.5h4" /></>,
 };
 const NavIcon = ({ name, size = 16, color = "currentColor" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -1553,6 +1554,54 @@ function PreparationPage({ state, dispatch }) {
   );
 }
 
+// ─── ECONOMIC CALENDAR / NEWS ────────────────────────────────────────────────
+// Embeds TradingView's free Economic Calendar widget (no API key needed) —
+// filtered to medium + high impact events (the "orange/red folder" news
+// traders actually care about: CPI, FOMC, NFP, PPI, rate decisions, etc.).
+// It's a live third-party embed, so it re-mounts the widget script whenever
+// the container is (re)rendered or the color theme changes.
+function EconomicCalendarPage({ state }) {
+  const containerRef = useRef(null);
+  const mode = state.theme?.mode === "day" ? "light" : "dark";
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.innerHTML = "";
+    const widgetDiv = document.createElement("div");
+    widgetDiv.className = "tradingview-widget-container__widget";
+    el.appendChild(widgetDiv);
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-events.js";
+    script.type = "text/javascript";
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      colorTheme: mode,
+      isTransparent: true,
+      width: "100%",
+      height: "680",
+      locale: "en",
+      importanceFilter: "0,1",
+      countryFilter: "us,eu,gb,jp,ca,au,cn,de,fr,ch,nz",
+    });
+    el.appendChild(script);
+  }, [mode]);
+
+  return (
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Economic Calendar" subtitle="Medium and high-impact news — CPI, FOMC, NFP, PPI, rate decisions, and more." />
+      <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
+        <Badge color={C.red}>● High Impact</Badge>
+        <Badge color={C.yellow}>● Medium Impact</Badge>
+        <div style={{ fontSize: 12, color: C.textDim }}>Live data via TradingView — times shown in your local timezone.</div>
+      </div>
+      <Card style={{ padding: 12, minHeight: 700 }}>
+        <div ref={containerRef} className="tradingview-widget-container" style={{ minHeight: 680 }} />
+      </Card>
+    </div>
+  );
+}
+
 // ─── LIVE SESSION CLOCK (header) ─────────────────────────────────────────────
 // Standard forex/futures session bands in UTC. Order matters — first match wins.
 const TRADING_SESSIONS =  [
@@ -1787,6 +1836,7 @@ const NAV = [
   { id: "dashboard", icon: <NavIcon name="dashboard" />, label: "Dashboard" },
   { id: "journal", icon: <NavIcon name="journal" />, label: "Trades" },
   { id: "preparation", icon: <NavIcon name="preparation" />, label: "Preparation" },
+  { id: "news", icon: <NavIcon name="news" />, label: "News" },
   { id: "strategies", icon: <NavIcon name="strategies" />, label: "Playbook" },
   { id: "analytics", icon: <NavIcon name="analytics" />, label: "Analytics", plus: true },
   { id: "myrecord", icon: <NavIcon name="myrecord" />, label: "My Record", plus: true },
@@ -1798,7 +1848,7 @@ const NAV = [
 
 // Nav items grouped into labeled sections for the redesigned sidebar.
 const NAV_GROUPS = [
-  { label: "Overview", ids: ["dashboard", "journal", "preparation"] },
+  { label: "Overview", ids: ["dashboard", "journal", "preparation", "news"] },
   { label: "Growth", ids: ["strategies", "analytics", "myrecord"] },
   { label: "Journal Plus", ids: ["mynotes", "emotions", "finances", "livecapital"] },
 ];
@@ -9918,6 +9968,7 @@ export default function App() {
     dashboard: <Dashboard state={state} dispatch={dispatch} setPage={setPage} />,
     journal: <Journal state={state} dispatch={dispatch} setPage={setPage} />,
     preparation: <PreparationPage state={state} dispatch={dispatch} />,
+    news: <EconomicCalendarPage state={state} />,
     import: isPlus(state) ? <ImportTrades state={state} dispatch={dispatch} setPage={setPage} /> : <UpgradeGate title="Bulk import is a Journal Plus feature" desc="Import trades from any broker/CSV in bulk once you upgrade to Journal Plus." dispatch={dispatch} />,
     mynotes: gatedPage("mynotes", <MyNotes state={state} dispatch={dispatch} />, "My Notes is a Journal Plus feature", "Unlock daily journaling — Graces & Goals, Quick Notes, Advanced Self Review, Mentor Notes, and Past Entries."),
     strategies: <Strategies state={state} dispatch={dispatch} />,
