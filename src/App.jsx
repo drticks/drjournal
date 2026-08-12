@@ -2717,6 +2717,7 @@ const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const SHARE_CARD_W = 1080;
 const SHARE_CHART_H = { wide: 460, tall: 660 };
 const SHARE_BRAND = "DR. JOURNAL";
+const SHARE_SITE_URL = "drjournal.pages.dev";
 
 function loadImageFromURL(url) {
   return new Promise((resolve, reject) => {
@@ -2905,8 +2906,9 @@ function shareCardLayout(aspect) {
   const chartY = statsRowY + statsRowH + 30 + chartLabelH, chartH = SHARE_CHART_H[aspect] || SHARE_CHART_H.wide;
   const bottomY = chartY + chartH + 28, bottomRowH = 100, bottomH = bottomRowH * 2 + 4;
   const taglineY = bottomY + bottomH + 44;
-  const H = taglineY + 26;
-  return { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomRowH, bottomH, taglineY };
+  const urlY = taglineY + 24;
+  const H = urlY + 20;
+  return { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomRowH, bottomH, taglineY, urlY };
 }
 // Derives 2–3 letter initials from SHARE_BRAND for the decorative watermark
 // mark (e.g. "DR. JOURNAL" → "DJ") — used in the header and footer.
@@ -2933,7 +2935,7 @@ function drawShareChartCrop(ctx, img, x, y, w, h, zoom, offsetXFrac, offsetYFrac
 // Core draw routine, shared by the live chart-crop preview (small canvas,
 // chart region only) and the full card export (whole layout) — see below.
 function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
-  const { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomRowH, bottomH, taglineY } = layout;
+  const { W, H, pad, outerPad, headerY, headerH, quoteY, quoteH, statsRowY, statsRowH, chartLabelH, chartY, chartH, bottomY, bottomRowH, bottomH, taglineY, urlY } = layout;
   const fees = parseFloat(trade.fees) || 0;
   const netPnl = trade.pnl - fees;
   const pnlColor = trade.outcome === "BE" ? "#FFD400" : netPnl >= 0 ? "#A1E503" : "#FF2965";
@@ -3102,6 +3104,9 @@ function drawShareCard(ctx, layout, trade, chartImg, frame, logoImg) {
     taglineSize -= 1; ctx.font = `700 ${taglineSize}px Inter, sans-serif`;
   }
   ctx.fillText(taglineSpaced, W / 2, taglineY);
+
+  ctx.font = "600 13px Inter, sans-serif"; ctx.fillStyle = "#5b6478"; ctx.textAlign = "center";
+  ctx.fillText(SHARE_SITE_URL, W / 2, urlY);
 }
 
 async function renderShareCardPNG(trade, screenshotUrl, frame) {
@@ -3133,8 +3138,9 @@ function shareMonthCardLayout(weekRowCount) {
   const calGridH = dowH + cellGap + weekRowCount * cellH + (weekRowCount - 1) * cellGap;
   const calH = calGridH + 28;
   const taglineY = calY + calH + 46;
-  const H = taglineY + 26;
-  return { W, H, pad, outerPad, headerY, headerH, heroY, heroH, statsBarY, statsBarH, calLabelH, calY, calH, dowH, cellGap, cellH, taglineY };
+  const urlY = taglineY + 24;
+  const H = urlY + 20;
+  return { W, H, pad, outerPad, headerY, headerH, heroY, heroH, statsBarY, statsBarH, calLabelH, calY, calH, dowH, cellGap, cellH, taglineY, urlY };
 }
 
 function drawMonthShareCard(ctx, layout, monthData, logoImg) {
@@ -3273,6 +3279,9 @@ function drawMonthShareCard(ctx, layout, monthData, logoImg) {
     taglineSize -= 1; ctx.font = `700 ${taglineSize}px Inter, sans-serif`;
   }
   ctx.fillText(taglineSpaced, W / 2, layout.taglineY);
+
+  ctx.font = "600 13px Inter, sans-serif"; ctx.fillStyle = "#5b6478"; ctx.textAlign = "center";
+  ctx.fillText(SHARE_SITE_URL, W / 2, layout.urlY);
 }
 
 // Builds the compact per-day payload shared by the PNG renderer, the shared
@@ -3567,7 +3576,7 @@ function MonthShareModal({ state, current, onClose }) {
   const pickLink = async () => {
     setStep("link"); setLinkError("");
     try { setLink(await createMonthShareLink(monthPayload)); }
-    catch { setLinkError("Couldn't generate link. Try again."); }
+    catch (err) { setLinkError(err?.message ? `Couldn't generate link: ${err.message}` : "Couldn't generate link. Try again."); }
   };
   const download = () => {
     const a = document.createElement("a");
