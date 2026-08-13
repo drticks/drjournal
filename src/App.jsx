@@ -128,6 +128,7 @@ function buildGlobalCSS() {
   @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes spadeBounce{0%,80%,100%{transform:translateY(0) scale(1);opacity:0.45}40%{transform:translateY(-12px) scale(1.15);opacity:1}}
+  @keyframes livePulse{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
   .fade-in{animation:fadeIn 0.2s ease forwards}
 
   /* ── Responsive: mobile topbar + sidebar drawer ───────────────────────── */
@@ -1932,15 +1933,33 @@ function LiveSessionClock() {
     return () => clearInterval(id);
   }, []);
   const session = getTradingSession(now);
+  const idx = TRADING_SESSIONS.indexOf(session);
+  const next = TRADING_SESSIONS[(idx + 1) % TRADING_SESSIONS.length];
+  const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  const span = (session.end - session.start + 24) % 24 || 24;
+  const into = (utcH - session.start + 24) % 24;
+  const progress = clamp(into / span, 0, 1);
+  const hoursLeft = Math.max(0, span - into);
+  const hL = Math.floor(hoursLeft), mL = Math.round((hoursLeft - hL) * 60);
+  const countdown = hL > 0 ? `${hL}h ${mL}m` : `${mL}m`;
+
   const timeStr = now.toLocaleTimeString("en-US", { hour12: false });
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, padding: "7px 14px", flexShrink: 0 }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: session.color, flexShrink: 0 }} />
-      <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: C.text, fontVariantNumeric: "tabular-nums" }}>{timeStr}</span>
-      <span style={{ width: 1, height: 16, background: C.border }} />
-      <span style={{ fontSize: 10, color: C.textDim, fontWeight: 700, letterSpacing: 0.5 }}>{dateStr}</span>
-      <Badge color={session.color}>{session.label}</Badge>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 12, padding: "8px 14px", flexShrink: 0, minWidth: 200 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ position: "relative", width: 7, height: 7, borderRadius: "50%", background: session.color, color: session.color, flexShrink: 0, animation: "livePulse 2s ease-out infinite" }} />
+        <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: C.text, fontVariantNumeric: "tabular-nums", letterSpacing: 0.3 }}>{timeStr}</span>
+        <span style={{ fontSize: 9.5, color: C.textDim, fontWeight: 700, letterSpacing: 0.5, marginLeft: "auto" }}>{dateStr}</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: session.color, whiteSpace: "nowrap" }}>{session.label}</span>
+        <div style={{ flex: 1, height: 4, borderRadius: 2, background: C.border, overflow: "hidden" }}>
+          <div style={{ width: `${progress * 100}%`, height: "100%", background: session.color, borderRadius: 2, transition: "width 1s linear" }} />
+        </div>
+        <span title={`Next: ${next.label}`} style={{ fontSize: 9.5, color: C.textDim, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{countdown} left</span>
+      </div>
     </div>
   );
 }
