@@ -1642,6 +1642,7 @@ function useDragBar(onChange) {
 
 function MeditationCard({ open, onToggle }) {
   const audioRef = useRef(null);
+  const lastTimeRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [curTime, setCurTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -1651,7 +1652,7 @@ function MeditationCard({ open, onToggle }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    const onTime = () => setCurTime(a.currentTime);
+    const onTime = () => { setCurTime(a.currentTime); lastTimeRef.current = a.currentTime; };
     const onMeta = () => setDuration(a.duration || 0);
     const onEnd = () => setPlaying(false);
     a.addEventListener("timeupdate", onTime);
@@ -1666,15 +1667,38 @@ function MeditationCard({ open, onToggle }) {
   // Live duration from the element itself (falls back to state) — avoids a
   // window where state hasn't caught up yet but the element already knows it.
   const liveDuration = () => { const a = audioRef.current; return a && isFinite(a.duration) && a.duration > 0 ? a.duration : duration; };
+
+  // Some browsers (iOS Safari especially) defer actually loading audio data
+  // until play() is called, and can silently drop a seek performed before
+  // that — snapping back to 0 once real playback/buffering starts, even if
+  // the seek looked like it worked. This re-checks a few times shortly after
+  // any seek or play and re-applies the intended position if it drifted.
+  const guardTime = (t) => {
+    [120, 400, 900].forEach(delay => {
+      setTimeout(() => {
+        const a = audioRef.current;
+        if (a && Math.abs(a.currentTime - t) > 1.5) { a.currentTime = t; setCurTime(t); lastTimeRef.current = t; }
+      }, delay);
+    });
+  };
   const seekTo = (time) => {
     const a = audioRef.current; if (!a) return;
     const dur = liveDuration();
     const t = dur ? clamp(time, 0, dur) : Math.max(0, time);
     a.currentTime = t;
     setCurTime(t); // update immediately instead of waiting on the next timeupdate tick
+    lastTimeRef.current = t;
+    guardTime(t);
   };
 
-  const toggle = () => { const a = audioRef.current; if (!a) return; if (playing) a.pause(); else a.play(); setPlaying(!playing); };
+  const toggle = () => {
+    const a = audioRef.current; if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); return; }
+    const target = lastTimeRef.current;
+    a.play();
+    setPlaying(true);
+    guardTime(target); // re-assert position in case play() itself resets it
+  };
   const skipBy = (secs) => seekTo(curTime + secs);
   const restart = () => { seekTo(0); const a = audioRef.current; if (a && !playing) { a.play(); setPlaying(true); } };
   const seekDrag = useDragBar(pct => seekTo(pct * liveDuration()));
