@@ -1516,18 +1516,24 @@ function RitualFlow({ state, dispatch, onDone }) {
 
 // Shared collapsible shell used by all three preparation cards — icon, title,
 // subtitle, a chevron/done indicator, click header to expand/collapse.
-function PrepCard({ icon, title, subtitle, open, onToggle, done, doneLabel, children }) {
+function PrepCard({ icon, title, subtitle, open, onToggle, onSkip, done, doneLabel, children }) {
   return (
     <Card style={{ padding: 0, overflow: "hidden" }}>
-      <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 22px", cursor: "pointer" }}>
-        <div style={{ width: 42, height: 42, borderRadius: 12, background: done ? C.accentDim : C.surfaceHigh, border: `1px solid ${done ? C.accent + "55" : C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: done ? C.accent : C.text }}>
-          {done ? <span style={{ fontSize: 18 }}>✓</span> : icon}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 22px" }}>
+        <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, minWidth: 0, cursor: "pointer" }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: done ? C.accentDim : C.surfaceHigh, border: `1px solid ${done ? C.accent + "55" : C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: done ? C.accent : C.text }}>
+            {done ? <span style={{ fontSize: 18 }}>✓</span> : icon}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>
+            <div style={{ fontSize: 12.5, color: C.textMuted, marginTop: 2 }}>{done ? doneLabel : subtitle}</div>
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>
-          <div style={{ fontSize: 12.5, color: C.textMuted, marginTop: 2 }}>{done ? doneLabel : subtitle}</div>
-        </div>
-        <span style={{ color: C.textDim, fontSize: 13, flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>▾</span>
+        {open ? (
+          <button onClick={onSkip || onToggle} title="Skip" style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16, lineHeight: 1 }}>×</button>
+        ) : (
+          <span onClick={onToggle} style={{ color: C.textDim, fontSize: 13, flexShrink: 0, cursor: "pointer", padding: 6 }}>▾</span>
+        )}
       </div>
       {open && <div style={{ padding: "0 22px 24px" }}>{children}</div>}
     </Card>
@@ -1535,7 +1541,7 @@ function PrepCard({ icon, title, subtitle, open, onToggle, done, doneLabel, chil
 }
 
 // ── Card 1: Preparation (mindset affirmations) ──────────────────────────────
-function AffirmationsCard({ state, dispatch, open, onToggle, done, onDone }) {
+function AffirmationsCard({ state, dispatch, open, onToggle, onSkip, done, onDone }) {
   const name = state.currentUser?.name || state.currentUser?.email || "Trader";
   const lines = [
     <>I am here for this trading session.</>,
@@ -1548,7 +1554,7 @@ function AffirmationsCard({ state, dispatch, open, onToggle, done, onDone }) {
   ];
   return (
     <PrepCard icon={<NavIcon name="preparation" size={19} />} title="Preparation" subtitle="Tell your mind what it's here to do — before you look at a single chart."
-      open={open} onToggle={onToggle} done={done} doneLabel="You're set for this session · tap to read it again">
+      open={open} onToggle={onToggle} onSkip={onSkip} done={done} doneLabel="You're set for this session · tap to read it again">
       <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
         {lines.map((ln, i) => (
           <div key={i} style={{ fontSize: 16, lineHeight: 1.6, color: C.text, paddingLeft: 16, borderLeft: `2px solid ${C.border}` }}>{ln}</div>
@@ -1623,6 +1629,8 @@ function MeditationCard({ open, onToggle }) {
   const [playing, setPlaying] = useState(false);
   const [curTime, setCurTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     const a = audioRef.current;
@@ -1636,38 +1644,72 @@ function MeditationCard({ open, onToggle }) {
     return () => { a.removeEventListener("timeupdate", onTime); a.removeEventListener("loadedmetadata", onMeta); a.removeEventListener("ended", onEnd); };
   }, [open]);
 
+  useEffect(() => { const a = audioRef.current; if (a) { a.volume = volume; a.muted = muted; } }, [volume, muted, open]);
+
   const toggle = () => { const a = audioRef.current; if (!a) return; if (playing) a.pause(); else a.play(); setPlaying(!playing); };
+  const skipBy = (secs) => { const a = audioRef.current; if (!a || !duration) return; a.currentTime = clamp(a.currentTime + secs, 0, duration); };
+  const restart = () => { const a = audioRef.current; if (!a) return; a.currentTime = 0; if (!playing) { a.play(); setPlaying(true); } };
   const seek = (e) => { const a = audioRef.current; if (!a || !duration) return; const pct = (e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.offsetWidth; a.currentTime = clamp(pct, 0, 1) * duration; };
+  const onVolumeSlide = (e) => { const pct = (e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.offsetWidth; const v = clamp(pct, 0, 1); setVolume(v); if (v > 0) setMuted(false); };
   const fmtT = (s) => { if (!isFinite(s)) return "0:00"; const m = Math.floor(s / 60), r = Math.floor(s % 60); return `${m}:${String(r).padStart(2, "0")}`; };
   const pct = duration ? (curTime / duration) * 100 : 0;
+  const effVolume = muted ? 0 : volume;
+
+  const skipBtnStyle = { width: 40, height: 40, borderRadius: "50%", background: C.surfaceHigh, border: `1px solid ${C.border}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.text, flexShrink: 0 };
 
   return (
     <PrepCard icon={<NavIcon name="preparation" size={19} />} title="Guided Meditation" subtitle="14 minutes · sit back, put in headphones, and let it run."
       open={open} onToggle={onToggle} done={false} doneLabel="">
       <audio ref={audioRef} src={meditationAudio} preload="metadata" />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0 4px" }}>
-        <div style={{
-          width: 120, height: 120, borderRadius: "50%", marginBottom: 22, display: "flex", alignItems: "center", justifyContent: "center",
-          background: `radial-gradient(circle, ${C.accentDim}, transparent 70%)`,
-          border: `2px solid ${C.accent}55`, transition: "transform 3s ease-in-out",
-          transform: playing ? "scale(1.06)" : "scale(1)",
-        }}>
-          <button onClick={toggle} style={{ width: 68, height: 68, borderRadius: "50%", background: C.accent, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#000" }}>
-            {playing ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
-            ) : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 4.5v15l13-7.5z" /></svg>
-            )}
+        <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 22 }}>
+          <button onClick={() => skipBy(-10)} title="Back 10s" style={skipBtnStyle}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 12a9.5 9.5 0 1 0 3-6.9" /><path d="M2.5 4.5v5h5" /></svg>
+          </button>
+          <div style={{
+            width: 108, height: 108, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+            background: `radial-gradient(circle, ${C.accentDim}, transparent 70%)`,
+            border: `2px solid ${C.accent}55`, transition: "transform 3s ease-in-out",
+            transform: playing ? "scale(1.06)" : "scale(1)", flexShrink: 0,
+          }}>
+            <button onClick={toggle} style={{ width: 64, height: 64, borderRadius: "50%", background: C.accent, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#000" }}>
+              {playing ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 4.5v15l13-7.5z" /></svg>
+              )}
+            </button>
+          </div>
+          <button onClick={() => skipBy(10)} title="Forward 10s" style={skipBtnStyle}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 12a9.5 9.5 0 1 1-3-6.9" /><path d="M21.5 4.5v5h-5" /></svg>
           </button>
         </div>
+
         <div style={{ width: "100%", maxWidth: 380 }}>
           <div onClick={seek} style={{ height: 6, borderRadius: 3, background: C.border, cursor: "pointer", position: "relative" }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: C.accent, borderRadius: 3 }} />
             <div style={{ position: "absolute", left: `${pct}%`, top: "50%", transform: "translate(-50%, -50%)", width: 13, height: 13, borderRadius: "50%", background: C.accent, boxShadow: `0 0 0 3px ${C.bg}` }} />
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11.5, color: C.textDim, fontVariantNumeric: "tabular-nums" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, marginBottom: 18, fontSize: 11.5, color: C.textDim, fontVariantNumeric: "tabular-nums" }}>
             <span>{fmtT(curTime)}</span>
             <span>{duration ? fmtT(duration) : "14:00"}</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={restart} title="Restart" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", flexShrink: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
+            </button>
+            <button onClick={() => setMuted(m => !m)} title={muted ? "Unmute" : "Mute"} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", flexShrink: 0 }}>
+              {effVolume === 0 ? (
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="m17 9 5 6M22 9l-5 6" /></svg>
+              ) : (
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="M16 8.5a5 5 0 0 1 0 7M19 5.5a9 9 0 0 1 0 13" /></svg>
+              )}
+            </button>
+            <div onClick={onVolumeSlide} style={{ flex: 1, height: 5, borderRadius: 3, background: C.border, cursor: "pointer", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${effVolume * 100}%`, background: C.textMuted, borderRadius: 3 }} />
+              <div style={{ position: "absolute", left: `${effVolume * 100}%`, top: "50%", transform: "translate(-50%, -50%)", width: 11, height: 11, borderRadius: "50%", background: C.textMuted, boxShadow: `0 0 0 3px ${C.bg}` }} />
+            </div>
           </div>
         </div>
       </div>
@@ -1689,6 +1731,10 @@ function PreparationPage({ state, dispatch }) {
     dispatch({ type: "COMPLETE_RITUAL", key: ritualKey, intention: "My trade, or no trade. I will plan the trade and trade the plan." });
     setOpenCard(null);
   };
+  const skipPrep = () => {
+    dispatch({ type: "COMPLETE_RITUAL", key: ritualKey, intention: "", skipped: true });
+    setOpenCard(null);
+  };
 
   return (
     <div style={{ height: "100%", overflowY: "auto", padding: "40px 20px" }}>
@@ -1703,7 +1749,7 @@ function PreparationPage({ state, dispatch }) {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <AffirmationsCard state={state} dispatch={dispatch} open={openCard === "prep"} onToggle={() => toggle("prep")} done={ritualDone && openCard !== "prep"} onDone={finishPrep} />
+          <AffirmationsCard state={state} dispatch={dispatch} open={openCard === "prep"} onToggle={() => toggle("prep")} onSkip={skipPrep} done={ritualDone && openCard !== "prep"} onDone={finishPrep} />
           <BoxBreathingCard open={openCard === "breathe"} onToggle={() => toggle("breathe")} />
           <MeditationCard open={openCard === "meditate"} onToggle={() => toggle("meditate")} />
         </div>
