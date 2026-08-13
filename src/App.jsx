@@ -1624,6 +1624,22 @@ function BoxBreathingCard({ open, onToggle }) {
 }
 
 // ── Card 3: Guided Meditation (14 min audio) ─────────────────────────────────
+// Shared press-and-drag handling for the seek bar and volume bar — pointer
+// capture means dragging keeps tracking even if the cursor slips outside the
+// thin bar, and onChange fires continuously while held, not just on click.
+function useDragBar(onChange) {
+  const dragging = useRef(false);
+  const computePct = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return clamp((e.clientX - rect.left) / rect.width, 0, 1);
+  };
+  return {
+    onPointerDown: (e) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); onChange(computePct(e)); },
+    onPointerMove: (e) => { if (dragging.current) onChange(computePct(e)); },
+    onPointerUp: () => { dragging.current = false; },
+  };
+}
+
 function MeditationCard({ open, onToggle }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -1640,17 +1656,30 @@ function MeditationCard({ open, onToggle }) {
     const onEnd = () => setPlaying(false);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("loadedmetadata", onMeta);
+    a.addEventListener("durationchange", onMeta);
     a.addEventListener("ended", onEnd);
-    return () => { a.removeEventListener("timeupdate", onTime); a.removeEventListener("loadedmetadata", onMeta); a.removeEventListener("ended", onEnd); };
+    return () => { a.removeEventListener("timeupdate", onTime); a.removeEventListener("loadedmetadata", onMeta); a.removeEventListener("durationchange", onMeta); a.removeEventListener("ended", onEnd); };
   }, [open]);
 
   useEffect(() => { const a = audioRef.current; if (a) { a.volume = volume; a.muted = muted; } }, [volume, muted, open]);
 
+  // Live duration from the element itself (falls back to state) — avoids a
+  // window where state hasn't caught up yet but the element already knows it.
+  const liveDuration = () => { const a = audioRef.current; return a && isFinite(a.duration) && a.duration > 0 ? a.duration : duration; };
+  const seekTo = (time) => {
+    const a = audioRef.current; if (!a) return;
+    const dur = liveDuration();
+    const t = dur ? clamp(time, 0, dur) : Math.max(0, time);
+    a.currentTime = t;
+    setCurTime(t); // update immediately instead of waiting on the next timeupdate tick
+  };
+
   const toggle = () => { const a = audioRef.current; if (!a) return; if (playing) a.pause(); else a.play(); setPlaying(!playing); };
-  const skipBy = (secs) => { const a = audioRef.current; if (!a || !duration) return; a.currentTime = clamp(a.currentTime + secs, 0, duration); };
-  const restart = () => { const a = audioRef.current; if (!a) return; a.currentTime = 0; if (!playing) { a.play(); setPlaying(true); } };
-  const seek = (e) => { const a = audioRef.current; if (!a || !duration) return; const pct = (e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.offsetWidth; a.currentTime = clamp(pct, 0, 1) * duration; };
-  const onVolumeSlide = (e) => { const pct = (e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.offsetWidth; const v = clamp(pct, 0, 1); setVolume(v); if (v > 0) setMuted(false); };
+  const skipBy = (secs) => seekTo(curTime + secs);
+  const restart = () => { seekTo(0); const a = audioRef.current; if (a && !playing) { a.play(); setPlaying(true); } };
+  const seekDrag = useDragBar(pct => seekTo(pct * liveDuration()));
+  const volumeDrag = useDragBar(pct => { setVolume(pct); if (pct > 0) setMuted(false); });
+
   const fmtT = (s) => { if (!isFinite(s)) return "0:00"; const m = Math.floor(s / 60), r = Math.floor(s % 60); return `${m}:${String(r).padStart(2, "0")}`; };
   const pct = duration ? (curTime / duration) * 100 : 0;
   const effVolume = muted ? 0 : volume;
@@ -1660,7 +1689,7 @@ function MeditationCard({ open, onToggle }) {
   return (
     <PrepCard icon={<NavIcon name="preparation" size={19} />} title="Guided Meditation" subtitle="14 minutes · sit back, put in headphones, and let it run."
       open={open} onToggle={onToggle} done={false} doneLabel="">
-      <audio ref={audioRef} src={meditationAudio} preload="metadata" />
+      <audio ref={audioRef} src={meditationAudio} preload="auto" />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0 4px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 22 }}>
           <button onClick={() => skipBy(-10)} title="Back 10s" style={skipBtnStyle}>
@@ -1686,11 +1715,13 @@ function MeditationCard({ open, onToggle }) {
         </div>
 
         <div style={{ width: "100%", maxWidth: 380 }}>
-          <div onClick={seek} style={{ height: 6, borderRadius: 3, background: C.border, cursor: "pointer", position: "relative" }}>
-            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: C.accent, borderRadius: 3 }} />
-            <div style={{ position: "absolute", left: `${pct}%`, top: "50%", transform: "translate(-50%, -50%)", width: 13, height: 13, borderRadius: "50%", background: C.accent, boxShadow: `0 0 0 3px ${C.bg}` }} />
+          <div {...seekDrag} style={{ height: 14, display: "flex", alignItems: "center", cursor: "pointer", position: "relative", touchAction: "none" }}>
+            <div style={{ height: 6, borderRadius: 3, background: C.border, width: "100%", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: C.accent, borderRadius: 3 }} />
+            </div>
+            <div style={{ position: "absolute", left: `${pct}%`, top: "50%", transform: "translate(-50%, -50%)", width: 15, height: 15, borderRadius: "50%", background: C.accent, boxShadow: `0 0 0 3px ${C.bg}` }} />
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, marginBottom: 18, fontSize: 11.5, color: C.textDim, fontVariantNumeric: "tabular-nums" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, marginBottom: 18, fontSize: 11.5, color: C.textDim, fontVariantNumeric: "tabular-nums" }}>
             <span>{fmtT(curTime)}</span>
             <span>{duration ? fmtT(duration) : "14:00"}</span>
           </div>
@@ -1706,9 +1737,11 @@ function MeditationCard({ open, onToggle }) {
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d="M16 8.5a5 5 0 0 1 0 7M19 5.5a9 9 0 0 1 0 13" /></svg>
               )}
             </button>
-            <div onClick={onVolumeSlide} style={{ flex: 1, height: 5, borderRadius: 3, background: C.border, cursor: "pointer", position: "relative" }}>
-              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${effVolume * 100}%`, background: C.textMuted, borderRadius: 3 }} />
-              <div style={{ position: "absolute", left: `${effVolume * 100}%`, top: "50%", transform: "translate(-50%, -50%)", width: 11, height: 11, borderRadius: "50%", background: C.textMuted, boxShadow: `0 0 0 3px ${C.bg}` }} />
+            <div {...volumeDrag} style={{ flex: 1, height: 14, display: "flex", alignItems: "center", cursor: "pointer", position: "relative", touchAction: "none" }}>
+              <div style={{ height: 5, borderRadius: 3, background: C.border, width: "100%", position: "relative" }}>
+                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${effVolume * 100}%`, background: C.textMuted, borderRadius: 3 }} />
+              </div>
+              <div style={{ position: "absolute", left: `${effVolume * 100}%`, top: "50%", transform: "translate(-50%, -50%)", width: 13, height: 13, borderRadius: "50%", background: C.textMuted, boxShadow: `0 0 0 3px ${C.bg}` }} />
             </div>
           </div>
         </div>
