@@ -4,6 +4,7 @@ import { supabase } from "./supabaseClient";
 import { loadCloudStateWithRetry, saveCloudState, flushCloudStateSync, getLocalCache, getSnapshots, hasRealData, onSyncStatusChange } from "./lib/cloudSync";
 import logoUrl from "./logo.png";
 import logoUrlDay from "./logo2.png";
+import meditationAudio from "./meditation.mp3";
 
 // ─── THEME — DR. JOURNAL (Neon) ─────────────────────────────────────────────────
 // C is intentionally a single mutable object — every component reads C.xxx at
@@ -1513,16 +1514,182 @@ function RitualFlow({ state, dispatch, onDone }) {
   );
 }
 
-// Full page (Sidebar → "Preparation") that hosts the ritual. Can be run any
-// time, as many times as wanted — not gated to a single pass per session.
-// Once completed for the current main session it shows a short confirmation
-// with a "Do it again" option instead of re-showing the flow automatically.
+// Shared collapsible shell used by all three preparation cards — icon, title,
+// subtitle, a chevron/done indicator, click header to expand/collapse.
+function PrepCard({ icon, title, subtitle, open, onToggle, done, doneLabel, children }) {
+  return (
+    <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 22px", cursor: "pointer" }}>
+        <div style={{ width: 42, height: 42, borderRadius: 12, background: done ? C.accentDim : C.surfaceHigh, border: `1px solid ${done ? C.accent + "55" : C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: done ? C.accent : C.text }}>
+          {done ? <span style={{ fontSize: 18 }}>✓</span> : icon}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>
+          <div style={{ fontSize: 12.5, color: C.textMuted, marginTop: 2 }}>{done ? doneLabel : subtitle}</div>
+        </div>
+        <span style={{ color: C.textDim, fontSize: 13, flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>▾</span>
+      </div>
+      {open && <div style={{ padding: "0 22px 24px" }}>{children}</div>}
+    </Card>
+  );
+}
+
+// ── Card 1: Preparation (mindset affirmations) ──────────────────────────────
+function AffirmationsCard({ state, dispatch, open, onToggle, done, onDone }) {
+  const name = state.currentUser?.name || state.currentUser?.email || "Trader";
+  const lines = [
+    <>I am here for this trading session.</>,
+    <>I am {name}. <b style={{ color: C.accent }}>Only good things happen to me.</b></>,
+    <>I am an <b style={{ color: C.accent }}>eight-figure trader</b> — I will act like one.</>,
+    <>I will follow <b style={{ color: C.accent }}>my plan</b> — only my plan.</>,
+    <><b style={{ color: C.accent }}>My trade, or no trade.</b></>,
+    <>I will plan the trade and trade the plan.</>,
+    <>I will remain <b style={{ color: C.accent }}>patient and disciplined.</b></>,
+  ];
+  return (
+    <PrepCard icon={<NavIcon name="preparation" size={19} />} title="Preparation" subtitle="Tell your mind what it's here to do — before you look at a single chart."
+      open={open} onToggle={onToggle} done={done} doneLabel="You're set for this session · tap to read it again">
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
+        {lines.map((ln, i) => (
+          <div key={i} style={{ fontSize: 16, lineHeight: 1.6, color: C.text, paddingLeft: 16, borderLeft: `2px solid ${C.border}` }}>{ln}</div>
+        ))}
+      </div>
+      <Btn onClick={onDone} style={{ width: "100%", justifyContent: "center" }}>Let's Get It</Btn>
+    </PrepCard>
+  );
+}
+
+// ── Card 2: Box Breathing (5 cycles) ─────────────────────────────────────────
+function BoxBreathingCard({ open, onToggle }) {
+  const [started, setStarted] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const breath = useBoxBreathing(open && started && !finished, BOX_BREATH_CYCLES, () => setFinished(true));
+  const breathScale = [1, 1, 0.62, 0.62][breath.phaseIdx];
+  const restart = () => { setFinished(false); setStarted(true); };
+
+  return (
+    <PrepCard icon={<NavIcon name="preparation" size={19} />} title="Box Breathing" subtitle={`${BOX_BREATH_CYCLES} cycles · 4 seconds each way — settle your nervous system before the open.`}
+      open={open} onToggle={() => { onToggle(); if (started) { setStarted(false); setFinished(false); } }} done={false} doneLabel="">
+      {!started && !finished && (
+        <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
+          <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 18, lineHeight: 1.6 }}>Inhale for 4, hold for 4, exhale for 4, hold for 4. Repeat {BOX_BREATH_CYCLES} times.</div>
+          <Btn onClick={() => setStarted(true)} style={{ width: "100%", justifyContent: "center" }}>Start Breathing</Btn>
+        </div>
+      )}
+      {started && !finished && (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, letterSpacing: 2, marginBottom: 18 }}>CYCLE {breath.cycle} OF {BOX_BREATH_CYCLES}</div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+            {BOX_PHASES.map((p, i) => (
+              <div key={i} style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                background: i === breath.phaseIdx ? C.accentDim : "transparent",
+                color: i === breath.phaseIdx ? C.accent : C.textDim,
+                border: `1px solid ${i === breath.phaseIdx ? C.accent + "66" : C.border}`,
+              }}>{p.label.toUpperCase()}</div>
+            ))}
+          </div>
+          <div style={{ width: 160, height: 160, margin: "0 auto 22px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{
+              width: 130, height: 130, borderRadius: "50%",
+              background: `radial-gradient(circle, ${C.accentDim}, ${C.accent}22)`,
+              border: `2px solid ${C.accent}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transform: `scale(${breathScale})`,
+              transition: `transform ${breath.phase.seconds}s linear`,
+            }}>
+              <div style={{ fontSize: 34, fontWeight: 800, color: C.accent, fontVariantNumeric: "tabular-nums" }}>{breath.remaining}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{breath.phase.label}</div>
+        </div>
+      )}
+      {finished && (
+        <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
+          <div style={{ display: "inline-flex", width: 56, height: 56, borderRadius: "50%", background: C.accentDim, alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+            <span style={{ fontSize: 26, color: C.accent }}>✓</span>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16 }}>Nice and steady. You're ready.</div>
+          <Btn variant="ghost" onClick={restart}>Do it again</Btn>
+        </div>
+      )}
+    </PrepCard>
+  );
+}
+
+// ── Card 3: Guided Meditation (14 min audio) ─────────────────────────────────
+function MeditationCard({ open, onToggle }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [curTime, setCurTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onTime = () => setCurTime(a.currentTime);
+    const onMeta = () => setDuration(a.duration || 0);
+    const onEnd = () => setPlaying(false);
+    a.addEventListener("timeupdate", onTime);
+    a.addEventListener("loadedmetadata", onMeta);
+    a.addEventListener("ended", onEnd);
+    return () => { a.removeEventListener("timeupdate", onTime); a.removeEventListener("loadedmetadata", onMeta); a.removeEventListener("ended", onEnd); };
+  }, [open]);
+
+  const toggle = () => { const a = audioRef.current; if (!a) return; if (playing) a.pause(); else a.play(); setPlaying(!playing); };
+  const seek = (e) => { const a = audioRef.current; if (!a || !duration) return; const pct = (e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.offsetWidth; a.currentTime = clamp(pct, 0, 1) * duration; };
+  const fmtT = (s) => { if (!isFinite(s)) return "0:00"; const m = Math.floor(s / 60), r = Math.floor(s % 60); return `${m}:${String(r).padStart(2, "0")}`; };
+  const pct = duration ? (curTime / duration) * 100 : 0;
+
+  return (
+    <PrepCard icon={<NavIcon name="preparation" size={19} />} title="Guided Meditation" subtitle="14 minutes · sit back, put in headphones, and let it run."
+      open={open} onToggle={onToggle} done={false} doneLabel="">
+      <audio ref={audioRef} src={meditationAudio} preload="metadata" />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0 4px" }}>
+        <div style={{
+          width: 120, height: 120, borderRadius: "50%", marginBottom: 22, display: "flex", alignItems: "center", justifyContent: "center",
+          background: `radial-gradient(circle, ${C.accentDim}, transparent 70%)`,
+          border: `2px solid ${C.accent}55`, transition: "transform 3s ease-in-out",
+          transform: playing ? "scale(1.06)" : "scale(1)",
+        }}>
+          <button onClick={toggle} style={{ width: 68, height: 68, borderRadius: "50%", background: C.accent, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#000" }}>
+            {playing ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 4.5v15l13-7.5z" /></svg>
+            )}
+          </button>
+        </div>
+        <div style={{ width: "100%", maxWidth: 380 }}>
+          <div onClick={seek} style={{ height: 6, borderRadius: 3, background: C.border, cursor: "pointer", position: "relative" }}>
+            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: C.accent, borderRadius: 3 }} />
+            <div style={{ position: "absolute", left: `${pct}%`, top: "50%", transform: "translate(-50%, -50%)", width: 13, height: 13, borderRadius: "50%", background: C.accent, boxShadow: `0 0 0 3px ${C.bg}` }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11.5, color: C.textDim, fontVariantNumeric: "tabular-nums" }}>
+            <span>{fmtT(curTime)}</span>
+            <span>{duration ? fmtT(duration) : "14:00"}</span>
+          </div>
+        </div>
+      </div>
+    </PrepCard>
+  );
+}
+
+// Full page (Sidebar → "Preparation") — three independent cards instead of a
+// single linear wizard: Preparation (mindset affirmations), Box Breathing,
+// and Guided Meditation. Each opens/closes on its own; completing the
+// Preparation card also marks today's ritual done (clears the sidebar dot).
 function PreparationPage({ state, dispatch }) {
   const ritualKey = ritualKeyFor(new Date());
-  const log = state.ritualLog?.[ritualKey];
-  const [redoTick, setRedoTick] = useState(0);
-  const [forceOpen, setForceOpen] = useState(false);
-  const showFlow = !log || forceOpen;
+  const ritualDone = !!state.ritualLog?.[ritualKey];
+  const [openCard, setOpenCard] = useState("prep");
+
+  const toggle = (id) => setOpenCard(c => c === id ? null : id);
+  const finishPrep = () => {
+    dispatch({ type: "COMPLETE_RITUAL", key: ritualKey, intention: "My trade, or no trade. I will plan the trade and trade the plan." });
+    setOpenCard(null);
+  };
+
   return (
     <div style={{ height: "100%", overflowY: "auto", padding: "40px 20px" }}>
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
@@ -1532,23 +1699,14 @@ function PreparationPage({ state, dispatch }) {
           </div>
           <div style={{ fontSize: 24, fontWeight: 800 }}>Pre-Session Preparation</div>
           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 8, lineHeight: 1.6, maxWidth: 460, marginLeft: "auto", marginRight: "auto" }}>
-            A short Arrive → Breathe → Your Lean → Commit check-in. Run it before any session, as many times as you want.
+            Three short practices. Run any of them before any session, as many times as you want.
           </div>
         </div>
-        <Card style={{ padding: 28 }}>
-          {showFlow ? (
-            <RitualFlow key={redoTick} state={state} dispatch={dispatch} onDone={() => setForceOpen(false)} />
-          ) : (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ display: "inline-flex", width: 64, height: 64, borderRadius: "50%", background: C.accentDim, alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-                <span style={{ fontSize: 30, color: C.accent }}>✓</span>
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>You're set for the {mainSessionFor(new Date())} session.</div>
-              {log?.intention && <div style={{ fontSize: 14, color: C.accent, fontWeight: 600, marginBottom: 16 }}>"{log.intention}"</div>}
-              <Btn variant="ghost" onClick={() => { setRedoTick(t => t + 1); setForceOpen(true); }}>Do it again</Btn>
-            </div>
-          )}
-        </Card>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <AffirmationsCard state={state} dispatch={dispatch} open={openCard === "prep"} onToggle={() => toggle("prep")} done={ritualDone && openCard !== "prep"} onDone={finishPrep} />
+          <BoxBreathingCard open={openCard === "breathe"} onToggle={() => toggle("breathe")} />
+          <MeditationCard open={openCard === "meditate"} onToggle={() => toggle("meditate")} />
+        </div>
       </div>
     </div>
   );
