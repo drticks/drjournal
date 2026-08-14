@@ -279,6 +279,7 @@ const NAV_ICON_PATHS = {
   moon: <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z" />,
   calendar: <><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9.5h18" /><path d="M8 2.5v4M16 2.5v4" /></>,
   news: <><rect x="3" y="5" width="14" height="15" rx="1.5" /><path d="M17 8h3a1 1 0 0 1 1 1v9.5a1.5 1.5 0 0 1-3 0V8Z" /><path d="M6.5 8.5h7M6.5 11.5h7M6.5 14.5h4" /></>,
+  globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z" /></>,
 };
 const NavIcon = ({ name, size = 16, color = "currentColor" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -1908,6 +1909,168 @@ function EconomicCalendarPage({ state }) {
   );
 }
 
+// ─── MARKET HOURS (forex session time zone converter) ───────────────────────
+// Fixed nominal UTC offsets — not DST-adjusted. Exact DST timing varies by
+// region/season and this is an illustrative session guide (matching how most
+// "session clock" tools work), not a precision timing system.
+const TZ_OPTIONS = [
+  { id: "local", label: "Local Time", offset: null },
+  { id: "utc", label: "UTC", offset: 0 },
+  { id: "la", label: "Los Angeles (GMT-8)", offset: -8 },
+  { id: "chicago", label: "Chicago (GMT-6)", offset: -6 },
+  { id: "ny", label: "New York (GMT-5)", offset: -5 },
+  { id: "toronto", label: "Toronto (GMT-5)", offset: -5 },
+  { id: "london", label: "London (GMT+0)", offset: 0 },
+  { id: "frankfurt", label: "Frankfurt (GMT+1)", offset: 1 },
+  { id: "johannesburg", label: "Johannesburg (GMT+2)", offset: 2 },
+  { id: "moscow", label: "Moscow (GMT+3)", offset: 3 },
+  { id: "dubai", label: "Dubai (GMT+4)", offset: 4 },
+  { id: "karachi", label: "Karachi (GMT+5)", offset: 5 },
+  { id: "mumbai", label: "Mumbai (GMT+5:30)", offset: 5.5 },
+  { id: "dhaka", label: "Dhaka (GMT+6)", offset: 6 },
+  { id: "bangkok", label: "Bangkok (GMT+7)", offset: 7 },
+  { id: "singapore", label: "Singapore (GMT+8)", offset: 8 },
+  { id: "hongkong", label: "Hong Kong (GMT+8)", offset: 8 },
+  { id: "tokyo", label: "Tokyo (GMT+9)", offset: 9 },
+  { id: "sydney", label: "Sydney (GMT+10)", offset: 10 },
+  { id: "auckland", label: "Auckland (GMT+12)", offset: 12 },
+];
+// The 4 major forex sessions — standard approximate UTC trading-hour ranges
+// (the common convention most forex education sites cite; based on each
+// financial center's typical business hours, not an exact contract).
+const FX_SESSIONS = [
+  { id: "sydney", label: "Sydney", ownOffset: 10, startUTC: 22, endUTC: 7, color: "#00E5FF" },
+  { id: "tokyo", label: "Tokyo", ownOffset: 9, startUTC: 0, endUTC: 9, color: "#B026FF" },
+  { id: "london", label: "London", ownOffset: 0, startUTC: 8, endUTC: 17, color: "#38bdf8" },
+  { id: "newyork", label: "New York", ownOffset: -5, startUTC: 13, endUTC: 22, color: "#A1E503" },
+];
+function fxSessionOpenAt(session, utcHour) {
+  const { startUTC: s, endUTC: e } = session;
+  return s < e ? (utcHour >= s && utcHour < e) : (utcHour >= s || utcHour < e);
+}
+// Splits a session's UTC range into 1-2 [startPct,widthPct] bars on a 24h
+// timeline in the display timezone, handling the wrap when shifting the
+// range by an offset pushes it across the display day's midnight.
+function fxSessionBars(session, displayOffset) {
+  const shift = (h) => ((h + displayOffset) % 24 + 24) % 24;
+  const start = shift(session.startUTC), end = shift(session.endUTC);
+  if (end <= start) return [
+    { startPct: (start / 24) * 100, widthPct: ((24 - start) / 24) * 100 },
+    { startPct: 0, widthPct: (end / 24) * 100 },
+  ];
+  return [{ startPct: (start / 24) * 100, widthPct: ((end - start) / 24) * 100 }];
+}
+function MarketHoursPage({ state }) {
+  const [now, setNow] = useState(new Date());
+  const [tz, setTz] = useState("local");
+  useEffect(() => { const id = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(id); }, []);
+
+  const browserOffset = -now.getTimezoneOffset() / 60;
+  const opt = TZ_OPTIONS.find(o => o.id === tz) || TZ_OPTIONS[0];
+  const displayOffset = opt.offset === null ? browserOffset : opt.offset;
+
+  const utcHourNow = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  const nowPct = (((utcHourNow + displayOffset) % 24 + 24) % 24) / 24 * 100;
+  const displayDate = new Date(now.getTime() + displayOffset * 3600000 + now.getTimezoneOffset() * 60000);
+  const nowLabel = displayDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const nowWeekday = displayDate.toLocaleDateString("en-US", { weekday: "short" });
+
+  const openCount = FX_SESSIONS.filter(s => fxSessionOpenAt(s, utcHourNow)).length;
+  const activity = openCount >= 2 ? "High" : openCount === 1 ? "Medium" : "Low";
+  const activityColor = openCount >= 2 ? C.accent : openCount === 1 ? C.yellow : C.textDim;
+
+  // Session-overlap count across the 24h display timeline, used for the
+  // activity chart — a real computed signal (how many sessions are open at
+  // each hour), not fabricated volume data.
+  const activityPoints = Array.from({ length: 25 }, (_, i) => {
+    const displayH = i;
+    const utcH = ((displayH - displayOffset) % 24 + 24) % 24;
+    return FX_SESSIONS.filter(s => fxSessionOpenAt(s, utcH)).length;
+  });
+  const maxA = Math.max(1, ...activityPoints);
+  const chartW = 960, chartH = 60;
+  const pathPts = activityPoints.map((v, i) => [((i / 24) * chartW), chartH - (v / maxA) * (chartH - 8) - 4]);
+  const linePath = pathPts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L${chartW},${chartH} L0,${chartH} Z`;
+
+  const hourMarks = Array.from({ length: 12 }, (_, i) => i * 2);
+
+  return (
+    <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
+      <PageHeader title="Market Hours" subtitle="See when the major forex sessions are open, overlapping, and when activity tends to be highest." actions={
+        <select value={tz} onChange={e => setTz(e.target.value)} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: "10px 14px", fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer" }}>
+          {TZ_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      } />
+
+      <Card style={{ overflow: "visible" }}>
+        {/* Hour ruler + now marker */}
+        <div style={{ display: "flex", marginBottom: 4 }}>
+          <div style={{ width: 180, flexShrink: 0 }} />
+          <div style={{ flex: 1, position: "relative", height: 34 }}>
+            <div style={{ position: "absolute", left: nowPct + "%", top: 0, transform: "translateX(-50%)", zIndex: 3, whiteSpace: "nowrap", textAlign: "center" }}>
+              <div style={{ background: C.accent, color: "#000", fontSize: 11, fontWeight: 800, padding: "4px 9px", borderRadius: 8, boxShadow: `0 0 12px ${C.accent}88` }}>{nowLabel}</div>
+              <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>{nowWeekday}</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ width: 180, flexShrink: 0, display: "flex", justifyContent: "center", color: C.yellow }}><NavIcon name="sun" size={13} /></div>
+          <div style={{ flex: 1, display: "flex", position: "relative" }}>
+            {hourMarks.map(h => <div key={h} style={{ flex: 1, textAlign: "center", fontSize: 9.5, color: C.textDim }}>{h}</div>)}
+            <div style={{ position: "absolute", right: -18, top: -1, color: C.blue }}><NavIcon name="moon" size={12} /></div>
+          </div>
+        </div>
+
+        {/* Now vertical line + session rows */}
+        <div style={{ position: "relative" }}>
+          <div style={{ position: "absolute", left: `calc(180px + (100% - 180px) * ${nowPct / 100})`, top: 0, bottom: 0, width: 2, background: C.accent, opacity: 0.5, zIndex: 1 }} />
+          {FX_SESSIONS.map(s => {
+            const localNow = new Date(now.getTime() + s.ownOffset * 3600000 + now.getTimezoneOffset() * 60000);
+            const open = fxSessionOpenAt(s, utcHourNow);
+            return (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", padding: "12px 0", borderTop: `1px solid ${C.border}` }}>
+                <div style={{ width: 180, flexShrink: 0, paddingRight: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+                    <span style={{ fontWeight: 800, fontSize: 14 }}>{s.label}</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{localNow.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}</div>
+                  <div style={{ fontSize: 10.5, color: C.textDim }}>{localNow.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })} · UTC{s.ownOffset >= 0 ? "+" : ""}{s.ownOffset}</div>
+                </div>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: open ? s.color : C.textDim, marginBottom: 6 }}>{s.label.toUpperCase()} SESSION {open ? "OPEN" : "CLOSED"}</div>
+                  <div style={{ position: "relative", height: 26, background: C.bg, borderRadius: 6, overflow: "hidden" }}>
+                    {fxSessionBars(s, displayOffset).map((b, i) => (
+                      <div key={i} style={{ position: "absolute", left: `${b.startPct}%`, width: `${b.widthPct}%`, top: 0, bottom: 0, background: s.color, opacity: open ? 0.9 : 0.35, borderRadius: 4 }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Session activity right now: <span style={{ color: activityColor }}>{activity}</span></div>
+            <div style={{ fontSize: 11.5, color: C.textDim, marginTop: 2 }}>Estimated from how many major sessions overlap at each hour — not live tick-volume data.</div>
+          </div>
+          <Badge color={activityColor}>{openCount} of 4 sessions open</Badge>
+        </div>
+        <svg viewBox={`0 0 ${chartW} ${chartH}`} width="100%" height={chartH} preserveAspectRatio="none" style={{ display: "block" }}>
+          <path d={areaPath} fill={C.accent} opacity="0.12" />
+          <path d={linePath} fill="none" stroke={C.accent} strokeWidth="2" />
+          <line x1={(nowPct / 100) * chartW} y1="0" x2={(nowPct / 100) * chartW} y2={chartH} stroke={C.accent} strokeWidth="1.5" opacity="0.6" />
+          <circle cx={(nowPct / 100) * chartW} cy={chartH - (openCount / maxA) * (chartH - 8) - 4} r="4.5" fill={C.accent} stroke={C.bg} strokeWidth="2" />
+        </svg>
+      </Card>
+    </div>
+  );
+}
+
 // ─── LIVE SESSION CLOCK (header) ─────────────────────────────────────────────
 // Standard forex/futures session bands in UTC. Order matters — first match wins.
 const TRADING_SESSIONS =  [
@@ -2161,6 +2324,7 @@ const NAV = [
   { id: "journal", icon: <NavIcon name="journal" />, label: "Trades" },
   { id: "preparation", icon: <NavIcon name="preparation" />, label: "Preparation" },
   { id: "news", icon: <NavIcon name="news" />, label: "News" },
+  { id: "markethours", icon: <NavIcon name="globe" />, label: "Market Hours" },
   { id: "strategies", icon: <NavIcon name="strategies" />, label: "Playbook" },
   { id: "analytics", icon: <NavIcon name="analytics" />, label: "Analytics", plus: true },
   { id: "myrecord", icon: <NavIcon name="myrecord" />, label: "My Record", plus: true },
@@ -2172,7 +2336,7 @@ const NAV = [
 
 // Nav items grouped into labeled sections for the redesigned sidebar.
 const NAV_GROUPS = [
-  { label: "Overview", ids: ["dashboard", "journal", "preparation", "news"] },
+  { label: "Overview", ids: ["dashboard", "journal", "preparation", "news", "markethours"] },
   { label: "Growth", ids: ["strategies", "analytics", "myrecord"] },
   { label: "Journal Plus", ids: ["mynotes", "emotions", "finances", "livecapital"] },
 ];
@@ -10293,6 +10457,7 @@ export default function App() {
     journal: <Journal state={state} dispatch={dispatch} setPage={setPage} />,
     preparation: <PreparationPage state={state} dispatch={dispatch} />,
     news: <EconomicCalendarPage state={state} />,
+    markethours: <MarketHoursPage state={state} />,
     import: isPlus(state) ? <ImportTrades state={state} dispatch={dispatch} setPage={setPage} /> : <UpgradeGate title="Bulk import is a Journal Plus feature" desc="Import trades from any broker/CSV in bulk once you upgrade to Journal Plus." dispatch={dispatch} />,
     mynotes: gatedPage("mynotes", <MyNotes state={state} dispatch={dispatch} />, "My Notes is a Journal Plus feature", "Unlock daily journaling — Graces & Goals, Quick Notes, Advanced Self Review, Mentor Notes, and Past Entries."),
     strategies: <Strategies state={state} dispatch={dispatch} />,
