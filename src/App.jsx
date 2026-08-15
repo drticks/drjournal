@@ -49,8 +49,20 @@ const DAY_BASE = {
   logoUrl: logoUrlDay,
 };
 
+// Slate — an alternative navy/slate palette (opt-in via Settings →
+// Appearance). Dark-only: no light variant was specified for it, so
+// selecting Slate ignores the Day/Night mode setting.
+const SLATE_BASE = {
+  bg: "#020617", surface: "#0F172B", surfaceHigh: "#324155", border: "#1E293B", borderLight: "#334155",
+  text: "#F1F5F9", textMuted: "#94A3B8", textDim: "#64748B", sidebar: "#020617",
+  purple: "#A78BFA", purpleDim: "#A78BFA1f", red: "#DF6C69", redDim: "#DF6C6922",
+  yellow: "#FBBF24", yellowDim: "#FBBF2422", blue: "#38BDF8", blueDim: "#38BDF822",
+  logoUrl,
+};
+
 const THEMES = {
   "Neon": { accent: "#A1E503", accentHover: "#8CCB02", accent2: "#39FF9E", accent2Hover: "#22D983" },
+  "Slate": { accent: "#42CB91", accentHover: "#34A97A", accent2: "#34D399", accent2Hover: "#22B88A" },
 };
 
 // Gradient wordmark style (neon green → spring green), matching the Dr. Journal logo.
@@ -63,9 +75,9 @@ const gradientTextStyle = () => ({
   backgroundClip: "text",
 });
 
-function applyTheme(_themeName, mode = "night", transparency = 0, popupTransparency = 0) {
-  const theme = THEMES["Neon"];
-  const base = mode === "day" ? DAY_BASE : NIGHT_BASE;
+function applyTheme(themeName = "Neon", mode = "night", transparency = 0, popupTransparency = 0) {
+  const theme = THEMES[themeName] || THEMES["Neon"];
+  const base = themeName === "Slate" ? SLATE_BASE : (mode === "day" ? DAY_BASE : NIGHT_BASE);
   Object.assign(C, base, theme, { accentDim: theme.accent + "22", accent2Dim: theme.accent2 + "22" });
   // Interface Transparency (Settings → adjustable 0–90): 0 = fully solid
   // panels, 90 = nearly invisible. Cards and their sub-panels (surfaceHigh)
@@ -106,17 +118,17 @@ function buildGlobalCSS() {
   input[type="date"]::-webkit-datetime-edit,input[type="time"]::-webkit-datetime-edit{padding:0}
   input[type="date"]::-webkit-datetime-edit-fields-wrapper,input[type="time"]::-webkit-datetime-edit-fields-wrapper{padding:0}
   button{cursor:pointer;font-family:inherit}
-  /* "+ Add Trade" style — black pill with a neon-green outline that brightens
-     and glows on hover, matching the Dr. Journal brand mark. */
+  /* "+ Add Trade" style — pill with an accent outline that brightens and
+     glows on hover, matching whichever theme accent is currently active. */
   .btn-teal-outline{
     background:${C.bg};
-    border:1.5px solid #A1E50366;
+    border:1.5px solid ${C.accent}66;
     color:${C.text};
   }
   .btn-teal-outline:hover{
-    background:#A1E50314;
-    border-color:#A1E503;
-    box-shadow:0 0 0 3px #A1E50322, 0 0 18px #A1E5034d;
+    background:${C.accent}14;
+    border-color:${C.accent};
+    box-shadow:0 0 0 3px ${C.accent}22, 0 0 18px ${C.accent}4d;
   }
   .btn-teal-outline:active{
     transform:scale(0.98);
@@ -9552,6 +9564,7 @@ function Settings({ state, dispatch }) {
 
   const theme = state.theme || { name: "Neon", mode: "night" };
   const setThemeMode = (mode) => dispatch({ type: "SET_THEME", theme: { mode } });
+  const setThemeName = (name) => dispatch({ type: "SET_THEME", theme: { name } });
   const saveSiteName = () => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; } dispatch({ type: "SET_SITE_NAME", name: siteNameInput.trim() || "DR. JOURNAL" }); };
   const handleWatermarkUpload = (file) => {
     if (!file) return;
@@ -9806,23 +9819,45 @@ function Settings({ state, dispatch }) {
 
       <Card>
         <SectionLabel>Theme</SectionLabel>
-        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>DR. JOURNAL runs one accent (Neon), in a Night or Day variant — colors and the logo switch together.</div>
-        <div style={{ display: "flex", borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, maxWidth: 460 }}>
-          <div onClick={() => setThemeMode("night")} style={{ flex: 1, padding: "18px 0", textAlign: "center", cursor: "pointer", background: theme.mode !== "day" ? C.accentDim : "transparent", borderRight: `1px solid ${C.border}` }}>
-            <div style={{ display: "flex", justifyContent: "center", gap: 5, marginBottom: 10 }}>
-              <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#000000", border: `1px solid ${C.border}` }} />
-              <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.accent, boxShadow: theme.mode !== "day" ? `0 0 8px ${C.accent}88` : "none" }} />
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: theme.mode !== "day" ? C.accent : C.textMuted }}>🌙 Night</div>
-          </div>
-          <div onClick={() => setThemeMode("day")} style={{ flex: 1, padding: "18px 0", textAlign: "center", cursor: "pointer", background: theme.mode === "day" ? C.accentDim : "transparent" }}>
-            <div style={{ display: "flex", justifyContent: "center", gap: 5, marginBottom: 10 }}>
-              <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#FEFEFE", border: `1px solid ${C.border}` }} />
-              <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.accent, boxShadow: theme.mode === "day" ? `0 0 8px ${C.accent}88` : "none" }} />
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: theme.mode === "day" ? C.accent : C.textMuted }}>☀️ Day</div>
-          </div>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Pick an accent, then (for Neon) a Night or Day variant — colors and the logo switch together.</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, maxWidth: 460, marginBottom: 18 }}>
+          {Object.entries(THEMES).map(([name, t]) => {
+            const active = theme.name === name;
+            const swatchBg = name === "Slate" ? "#0F172B" : "#0A0A0A";
+            return (
+              <div key={name} onClick={() => setThemeName(name)} style={{ border: `2px solid ${active ? t.accent : C.border}`, borderRadius: 12, padding: "14px 12px", textAlign: "center", cursor: "pointer", background: active ? t.accent + "0f" : "transparent" }}>
+                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 10 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: swatchBg, border: `1px solid ${C.border}` }} />
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: t.accent, boxShadow: active ? `0 0 8px ${t.accent}88` : "none" }} />
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: active ? t.accent : C.text }}>{name}</div>
+                <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{name === "Slate" ? "Navy · dark only" : "Black & white · Night/Day"}</div>
+              </div>
+            );
+          })}
         </div>
+
+        {theme.name === "Slate" ? (
+          <div style={{ fontSize: 11.5, color: C.textDim, background: C.surfaceHigh, borderRadius: 10, padding: "10px 14px", maxWidth: 460 }}>Slate is a single dark palette — Night/Day mode doesn't apply while it's selected.</div>
+        ) : (
+          <div style={{ display: "flex", borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, maxWidth: 460 }}>
+            <div onClick={() => setThemeMode("night")} style={{ flex: 1, padding: "18px 0", textAlign: "center", cursor: "pointer", background: theme.mode !== "day" ? C.accentDim : "transparent", borderRight: `1px solid ${C.border}` }}>
+              <div style={{ display: "flex", justifyContent: "center", gap: 5, marginBottom: 10 }}>
+                <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#000000", border: `1px solid ${C.border}` }} />
+                <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.accent, boxShadow: theme.mode !== "day" ? `0 0 8px ${C.accent}88` : "none" }} />
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: theme.mode !== "day" ? C.accent : C.textMuted }}>🌙 Night</div>
+            </div>
+            <div onClick={() => setThemeMode("day")} style={{ flex: 1, padding: "18px 0", textAlign: "center", cursor: "pointer", background: theme.mode === "day" ? C.accentDim : "transparent" }}>
+              <div style={{ display: "flex", justifyContent: "center", gap: 5, marginBottom: 10 }}>
+                <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#FEFEFE", border: `1px solid ${C.border}` }} />
+                <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.accent, boxShadow: theme.mode === "day" ? `0 0 8px ${C.accent}88` : "none" }} />
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: theme.mode === "day" ? C.accent : C.textMuted }}>☀️ Day</div>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card>
