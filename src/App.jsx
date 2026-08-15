@@ -2016,8 +2016,10 @@ function MarketHoursPage({ state }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
           <div style={{ width: 180, flexShrink: 0, display: "flex", justifyContent: "center", color: C.yellow }}><NavIcon name="sun" size={13} /></div>
-          <div style={{ flex: 1, display: "flex", position: "relative" }}>
-            {hourMarks.map(h => <div key={h} style={{ flex: 1, textAlign: "center", fontSize: 9.5, color: C.textDim }}>{h}</div>)}
+          <div style={{ flex: 1, position: "relative", height: 14 }}>
+            {hourMarks.map(h => (
+              <div key={h} style={{ position: "absolute", left: `${(h / 24) * 100}%`, transform: "translateX(-50%)", fontSize: 9.5, color: C.textDim, whiteSpace: "nowrap" }}>{h}</div>
+            ))}
             <div style={{ position: "absolute", right: -18, top: -1, color: C.blue }}><NavIcon name="moon" size={12} /></div>
           </div>
         </div>
