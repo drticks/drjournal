@@ -1317,7 +1317,111 @@ function AuthScreen({ state, dispatch }) {
   );
 }
 
-// ─── PRE-SESSION RITUAL (Arrive · Breathe · Your Lean · Commit) ────────────
+// ─── LANDING PAGE (shown before Sign In, for logged-out visitors) ──────────
+const LANDING_FEATURES = [
+  { icon: "journal", title: "Trade Journal", desc: "Log every trade with entry/exit, screenshots, setups, sessions, and how you felt going in." },
+  { icon: "dashboard", title: "Performance Dashboard", desc: "Equity curve, win rate, profit factor, and a Trading Mastery score built from your real data." },
+  { icon: "emotions", title: "Behavioral Edge Score", desc: "See how your emotions, exit discipline, and consistency actually affect your P&L." },
+  { icon: "preparation", title: "Pre-Session Preparation", desc: "Mindset affirmations, guided box breathing, and a 14-minute meditation before you trade." },
+  { icon: "strategies", title: "Playbook", desc: "Document your setups with rules and checklists, and track how each one actually performs." },
+  { icon: "finances", title: "Prop Firm Tracking", desc: "Track evaluation costs, funded fees, and payouts across every prop firm you trade." },
+  { icon: "livecapital", title: "Live Capital", desc: "Track real account growth, drawdown, and risk buffer with automatic alerts." },
+  { icon: "news", title: "Economic Calendar", desc: "High and medium-impact news — CPI, FOMC, NFP, PPI — filtered to what matters." },
+  { icon: "globe", title: "Market Hours", desc: "See Sydney, Tokyo, London, and New York sessions overlap, in your own timezone." },
+];
+
+function LandingPage({ state, onEnter }) {
+  return (
+    <div style={{ minHeight: "100%" }}>
+      {/* Nav */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 28px", borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 20, background: C.bg + "e6", backdropFilter: "blur(8px)" }}>
+        <img src={C.logoUrl} alt="" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover" }} />
+        <div style={{ fontSize: 16, fontWeight: 800, ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
+        <div style={{ flex: 1 }} />
+        <Btn small variant="ghost" onClick={onEnter}>Sign In</Btn>
+        <Btn small onClick={onEnter}>Get Started</Btn>
+      </div>
+
+      {/* Hero */}
+      <div style={{ textAlign: "center", padding: "80px 24px 60px", maxWidth: 780, margin: "0 auto" }}>
+        <Badge color={C.accent}>Journal · Learn · Discipline · Grow</Badge>
+        <h1 style={{ fontSize: 44, fontWeight: 800, letterSpacing: -1.5, margin: "20px 0 16px", lineHeight: 1.15 }}>
+          Trade with a plan. <span style={{ ...gradientTextStyle() }}>Journal with purpose.</span>
+        </h1>
+        <p style={{ fontSize: 16, color: C.textMuted, lineHeight: 1.6, maxWidth: 560, margin: "0 auto 32px" }}>
+          Not just a trade log — a full pre-session ritual, behavioral analytics, prop firm tracking, and live market context, all in one place built for discipline over dopamine.
+        </p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          <Btn onClick={onEnter} style={{ fontSize: 15, padding: "13px 28px" }}>Get Started Free</Btn>
+          <Btn variant="ghost" onClick={onEnter} style={{ fontSize: 15, padding: "13px 28px" }}>Sign In</Btn>
+        </div>
+      </div>
+
+      {/* Feature grid */}
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 24px 70px" }}>
+        <div style={{ textAlign: "center", marginBottom: 30 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}><span style={{ width: 10, height: 2, borderRadius: 2, background: C.accent }} />Everything In The Journal<span style={{ width: 10, height: 2, borderRadius: 2, background: C.accent }} /></div>
+          <h2 style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>Built for how you actually trade</h2>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          {LANDING_FEATURES.map(f => (
+            <Card key={f.title}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: C.accentDim, border: `1px solid ${C.accent}40`, display: "flex", alignItems: "center", justifyContent: "center", color: C.accent, marginBottom: 14 }}>
+                <NavIcon name={f.icon} size={19} />
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 6 }}>{f.title}</div>
+              <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6 }}>{f.desc}</div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Pricing teaser */}
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: "0 24px 70px" }}>
+        <div style={{ textAlign: "center", marginBottom: 30 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}><span style={{ width: 10, height: 2, borderRadius: 2, background: C.accent }} />Pricing<span style={{ width: 10, height: 2, borderRadius: 2, background: C.accent }} /></div>
+          <h2 style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>Start free. Upgrade when you're ready.</h2>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <Card>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{PLAN_NAME.free}</div>
+            <div style={{ fontSize: 30, fontWeight: 800, marginBottom: 16 }}>Free</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13, color: C.textMuted }}>
+              <div>✓ Up to {FREE_LIMITS.maxTrades} trades</div>
+              <div>✓ {FREE_LIMITS.maxAccounts} trading account</div>
+              <div>✓ {FREE_LIMITS.maxSetups} playbook setups</div>
+              <div>✓ Dashboard &amp; core journal</div>
+            </div>
+          </Card>
+          <Card style={{ border: `1px solid ${C.accent}55`, background: C.accent + "0a" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, textTransform: "uppercase", letterSpacing: 1 }}>{PLAN_NAME.plus}</div>
+              <PlusBadge small />
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 800, marginBottom: 16 }}>Unlocked</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13, color: C.textMuted }}>
+              <div>✓ Unlimited trades &amp; accounts</div>
+              <div>✓ Analytics, Edge Score &amp; My Record</div>
+              <div>✓ Prop Firms &amp; Live Capital tracking</div>
+              <div>✓ My Notes &amp; unlimited screenshots</div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ borderTop: `1px solid ${C.border}`, padding: "32px 24px", textAlign: "center" }}>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 14, flexWrap: "wrap" }}>
+          <ContactCTA kind="mail" />
+          <ContactCTA kind="instagram" />
+        </div>
+        <div style={{ fontSize: 12, color: C.textDim }}>© {new Date().getFullYear()} {state.siteName || "DR. JOURNAL"} · drjournal.pages.dev</div>
+      </div>
+    </div>
+  );
+}
+
+
 // Shown once per main session (Asian / London / New York) per calendar day,
 // before the person reaches the rest of the journal. Independent of the
 // finer 9-band TRADING_SESSIONS used for trade tagging below — this only
@@ -10245,6 +10349,7 @@ class PageErrorBoundary extends React.Component {
 export default function App() {
   const [state, setRawState] = useState(() => initState());
   const [page, setPage] = useState("dashboard");
+  const [showLanding, setShowLanding] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [cloudLoaded, setCloudLoaded] = useState(false);
@@ -10471,7 +10576,7 @@ export default function App() {
       <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
         <PlanAnnouncementBanner />
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-          <AuthScreen state={state} dispatch={dispatch} />
+          {showLanding ? <LandingPage state={state} onEnter={() => setShowLanding(false)} /> : <AuthScreen state={state} dispatch={dispatch} />}
         </div>
       </div>
     </>
