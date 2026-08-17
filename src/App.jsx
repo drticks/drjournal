@@ -347,6 +347,29 @@ function PlanAnnouncementBanner() {
   );
 }
 
+// Shown across every page while browsing the sample data loaded from the
+// landing page's "Get Started Free" button — never shown to a real signed-in
+// user, since it's gated on state.isDemo, which only ENTER_DEMO ever sets.
+function DemoModeBanner({ dispatch }) {
+  return (
+    <div style={{
+      flexShrink: 0, width: "100%", position: "relative", zIndex: 600,
+      background: C.accent, color: "#000", padding: "10px 16px",
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+      flexWrap: "wrap", textAlign: "center", boxShadow: "0 2px 14px #0007",
+    }}>
+      <span style={{ fontSize: 15, flexShrink: 0 }}>👀</span>
+      <span style={{ fontSize: 13, fontWeight: 800 }}>You're exploring sample data.</span>
+      <span
+        onClick={() => dispatch({ type: "LOGOUT" })}
+        style={{ fontSize: 13, fontWeight: 800, textDecoration: "underline", cursor: "pointer" }}
+      >
+        Sign in to track your own trades →
+      </span>
+    </div>
+  );
+}
+
 // Full-page paywall shown in place of a locked page's content.
 function UpgradeGate({ title, desc, dispatch }) {
   return (
@@ -744,6 +767,20 @@ function defaultState() {
 // True zero-state for brand-new signups — no demo trades, prop firms,
 // payouts, capital transactions, or live capital plan. The user builds
 // everything themselves from here.
+// Full sample environment for a logged-out visitor exploring from the
+// landing page — reuses defaultState()'s existing seed accounts/strategies/
+// prop firms/live capital plus genDemoData()'s sample trades. currentUser
+// deliberately has no id (see ENTER_DEMO in the reducer for why).
+function buildDemoState() {
+  return {
+    ...defaultState(),
+    trades: genDemoData(),
+    currentUser: { name: "Alex Demo", email: "demo@dr_journal.io" },
+    isDemo: true,
+    plan: "plus", // demo always shows the full feature set, independent of PROMO_ALL_FEATURES_FREE
+  };
+}
+
 function blankState() {
   const base = defaultState();
   const today = new Date().toISOString().slice(0, 10);
@@ -841,6 +878,13 @@ function reducer(state, action) {
     // their same user record rather than sending them back to auth.
     case "CLEAR_ALL_DATA": next = { ...blankState(), currentUser: state.currentUser, modal: null }; break;
     case "REGISTER": next = { ...blankState(), users: [...state.users, action.user], currentUser: action.user, modal: "welcome" }; break;
+    // Loads a fully seeded demo environment (sample trades, accounts, prop
+    // firms, playbook, live capital) for a logged-out visitor exploring from
+    // the landing page. Deliberately sets currentUser to a user with NO id —
+    // every cloud-sync effect in App() is gated on state.currentUser?.id, so
+    // an id-less demo user makes them all no-op automatically: nothing here
+    // is ever fetched from or written to Supabase.
+    case "ENTER_DEMO": next = { ...action.data }; break;
     case "SET_ACTIVE_ACCOUNT": next = { ...state, activeAccount: action.id }; break;
     case "ADD_TRADE": next = { ...state, trades: [action.trade, ...state.trades] }; break;
     case "DELETE_TRADE": next = { ...state, trades: state.trades.filter(t => t.id !== action.id) }; break;
@@ -1330,7 +1374,7 @@ const LANDING_FEATURES = [
   { icon: "globe", title: "Market Hours", desc: "See Sydney, Tokyo, London, and New York sessions overlap, in your own timezone." },
 ];
 
-function LandingPage({ state, onEnter }) {
+function LandingPage({ state, onSignIn, onDemo }) {
   return (
     <div style={{ minHeight: "100%" }}>
       {/* Nav */}
@@ -1338,8 +1382,8 @@ function LandingPage({ state, onEnter }) {
         <img src={C.logoUrl} alt="" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover" }} />
         <div style={{ fontSize: 16, fontWeight: 800, ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
         <div style={{ flex: 1 }} />
-        <Btn small variant="ghost" onClick={onEnter}>Sign In</Btn>
-        <Btn small onClick={onEnter}>Get Started</Btn>
+        <Btn small variant="ghost" onClick={onSignIn}>Sign In</Btn>
+        <Btn small onClick={onDemo}>Get Started</Btn>
       </div>
 
       {/* Hero */}
@@ -1352,8 +1396,8 @@ function LandingPage({ state, onEnter }) {
           Not just a trade log — a full pre-session ritual, behavioral analytics, prop firm tracking, and live market context, all in one place built for discipline over dopamine.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <Btn onClick={onEnter} style={{ fontSize: 15, padding: "13px 28px" }}>Get Started Free</Btn>
-          <Btn variant="ghost" onClick={onEnter} style={{ fontSize: 15, padding: "13px 28px" }}>Sign In</Btn>
+          <Btn onClick={onDemo} style={{ fontSize: 15, padding: "13px 28px" }}>Get Started Free</Btn>
+          <Btn variant="ghost" onClick={onSignIn} style={{ fontSize: 15, padding: "13px 28px" }}>Sign In</Btn>
         </div>
       </div>
 
@@ -10576,13 +10620,19 @@ export default function App() {
       <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
         <PlanAnnouncementBanner />
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-          {showLanding ? <LandingPage state={state} onEnter={() => setShowLanding(false)} /> : <AuthScreen state={state} dispatch={dispatch} />}
+          {showLanding ? (
+            <LandingPage
+              state={state}
+              onSignIn={() => setShowLanding(false)}
+              onDemo={() => { dispatch({ type: "ENTER_DEMO", data: buildDemoState() }); setShowLanding(false); }}
+            />
+          ) : <AuthScreen state={state} dispatch={dispatch} />}
         </div>
       </div>
     </>
   );
 
-  if (!cloudLoaded) return (
+  if (!cloudLoaded && !state.isDemo) return (
     <>
       <style>{buildGlobalCSS()}</style>
       <div style={{ minHeight: "100vh", background: C.bg }}><SpadeLoader label="Loading your journal…" /></div>
@@ -10640,7 +10690,7 @@ export default function App() {
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", height: "100vh", position: "relative", zIndex: 1 }}>
-        <PlanAnnouncementBanner />
+        {state.isDemo ? <DemoModeBanner dispatch={dispatch} /> : <PlanAnnouncementBanner />}
         <TopHeader state={state} dispatch={dispatch} setPage={setPage} page={page} syncStatus={syncStatus} />
         <div className="app-shell" style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
           <Sidebar page={page} setPage={setPage} state={state} dispatch={dispatch} mobileNavOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
