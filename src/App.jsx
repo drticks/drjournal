@@ -348,7 +348,7 @@ function PlanAnnouncementBanner() {
 }
 
 // Shown across every page while browsing the sample data loaded from the
-// landing page's "Get Started Free" button — never shown to a real signed-in
+// landing page's "Explore Demo Data" button — never shown to a real signed-in
 // user, since it's gated on state.isDemo, which only ENTER_DEMO ever sets.
 function DemoModeBanner({ dispatch }) {
   return (
@@ -1383,7 +1383,7 @@ function LandingPage({ state, onSignIn, onDemo }) {
         <div style={{ fontSize: 16, fontWeight: 800, ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
         <div style={{ flex: 1 }} />
         <Btn small variant="ghost" onClick={onSignIn}>Sign In</Btn>
-        <Btn small onClick={onDemo}>Get Started</Btn>
+        <Btn small onClick={onDemo}>Explore Demo Data</Btn>
       </div>
 
       {/* Hero */}
@@ -1396,7 +1396,7 @@ function LandingPage({ state, onSignIn, onDemo }) {
           Not just a trade log — a full pre-session ritual, behavioral analytics, prop firm tracking, and live market context, all in one place built for discipline over dopamine.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <Btn onClick={onDemo} style={{ fontSize: 15, padding: "13px 28px" }}>Get Started Free</Btn>
+          <Btn onClick={onDemo} style={{ fontSize: 15, padding: "13px 28px" }}>Explore Demo Data</Btn>
           <Btn variant="ghost" onClick={onSignIn} style={{ fontSize: 15, padding: "13px 28px" }}>Sign In</Btn>
         </div>
       </div>
