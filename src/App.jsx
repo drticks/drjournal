@@ -2510,13 +2510,7 @@ function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
         <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 10px" }}>
           <Btn variant="tealOutline" onClick={() => openAddTrade(state, dispatch)} style={{ width: "100%", justifyContent: "center", fontSize: 13, marginBottom: 8, borderRadius: 10 }}>+ Add Trade</Btn>
           <button onClick={() => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); onClose && onClose(); return; } setPage("import"); onClose && onClose(); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)`, border: "none", borderRadius: 10, color: "#000", fontSize: 12, fontWeight: 700, padding: 9, cursor: "pointer", marginBottom: 10, opacity: page === "import" ? 1 : 0.9, boxShadow: page === "import" ? `0 0 0 2px ${C.accent}55` : "none" }}>Import Trades {!isPlus(state) && <PlusBadge small />}</button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 9px", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10 }}>
-            <span style={{ width: 24, height: 24, borderRadius: "50%", background: C.accentDim, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-              {(state.currentUser?.name || state.currentUser?.email || "?").charAt(0).toUpperCase()}
-            </span>
-            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{state.currentUser?.name || "Account"}</span>
-            <button title="Sign Out" onClick={async () => { await supabase.auth.signOut(); dispatch({ type: "LOGOUT" }); }} style={{ background: "none", border: "none", color: C.textDim, cursor: "pointer", fontSize: 13, display: "flex", padding: 2 }}>⏻</button>
-          </div>
+          <button onClick={async () => { await supabase.auth.signOut(); dispatch({ type: "LOGOUT" }); }} style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, color: C.textMuted, fontSize: 13, fontWeight: 600, padding: 9, cursor: "pointer" }}>Sign Out</button>
         </div>
       </div>
     </>
