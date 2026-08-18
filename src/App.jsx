@@ -210,22 +210,9 @@ const fmt$ = (n) => { const a = Math.abs(n).toFixed(2); return n >= 0 ? `+$${a}`
 // size) instead of a dollar figure — useful when you want to think in terms
 // of process/risk rather than account balance. Falls back to $ when a trade
 // doesn't have enough data (no entry price or size) to compute a % return.
-const pnlPctOfNotional = (t, value) => {
-  const notional = (parseFloat(t.entry) || 0) * (parseFloat(t.size) || 0);
-  if (!notional) return null;
-  return ((value ?? t.pnl) / notional) * 100;
-};
-const fmtPct = (pct) => `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-// Formats a trade's P&L according to the active global display mode.
-// `value` lets callers pass a derived number (e.g. fee-adjusted Net P&L)
-// instead of the trade's raw stored pnl.
-const fmtPnlMode = (t, mode, value) => {
-  if (mode === "percent") {
-    const pct = pnlPctOfNotional(t, value);
-    return pct == null ? fmt$(value ?? t.pnl) : fmtPct(pct);
-  }
-  return fmt$(value ?? t.pnl);
-};
+// Formats a trade's P&L in dollars. `value` lets callers pass a derived
+// number (e.g. fee-adjusted Net P&L) instead of the trade's raw stored pnl.
+const fmtPnlMode = (t, value) => fmt$(value ?? t.pnl);
 const fmtDate = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 const ACCOUNT_COLORS = [C.accent, C.yellow, C.blue, "#ff8844", "#cc44ff", "#44ccff", "#ff44cc"];
@@ -729,13 +716,11 @@ function defaultState() {
       { id: "fp5", firmId: "pf4", gross: 950, splitPct: 65, date: "2025-12-01", certificateUrl: "", notes: "December payout" },
       { id: "fp6", firmId: "pf1", gross: 1800, splitPct: 80, date: "2026-01-28", certificateUrl: "", notes: "January payout - best month yet" },
     ],
-    siteName: "DR. JOURNAL",
     // Pre-session ritual: a short Arrive / Breathe / Your Lean / Commit flow
     // shown once per main session (Asian / London / New York) per day,
     // before the person can reach the rest of the journal.
     ritual: { enabled: true },
     ritualLog: {}, // { "2026-08-06_London": { intention, skipped, completedAt } }
-    pnlDisplayMode: "money", // "money" | "percent" — global $ / % toggle for trade-level P&L displays
     plan: "free", // "free" (Journal Basic) | "plus" (Journal Plus $10/mo)
     theme: { name: "Neon", mode: "night" },
     themeSchemaVersion: THEME_SCHEMA_VERSION,
@@ -927,10 +912,8 @@ function reducer(state, action) {
     case "SET_THEME": next = { ...state, theme: { ...state.theme, ...action.theme } }; break;
     case "SET_TRANSPARENCY": next = { ...state, uiTransparency: action.value }; break;
     case "SET_POPUP_TRANSPARENCY": next = { ...state, popupTransparency: action.value }; break;
-    case "SET_SITE_NAME": next = { ...state, siteName: action.name }; break;
     case "SET_RITUAL_ENABLED": next = { ...state, ritual: { ...state.ritual, enabled: action.enabled } }; break;
     case "COMPLETE_RITUAL": next = { ...state, ritualLog: { ...state.ritualLog, [action.key]: { intention: action.intention || "", skipped: !!action.skipped, completedAt: new Date().toISOString() } } }; break;
-    case "SET_PNL_DISPLAY_MODE": next = { ...state, pnlDisplayMode: action.mode }; break;
     case "SET_PLAN": next = { ...state, plan: action.plan, modal: null }; break;
     case "SET_WATERMARK": next = { ...state, watermark: { ...state.watermark, ...action.watermark } }; break;
     case "SET_PRIVACY": next = { ...state, privacy: { ...state.privacy, ...action.data } }; break;
@@ -1304,7 +1287,7 @@ function AuthScreen({ state, dispatch }) {
       <div style={{ width: "100%", maxWidth: 440 }} className="fade-in">
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ display: "inline-flex", padding: 6, borderRadius: 30, background: `linear-gradient(140deg, ${C.accent}55, transparent 60%)` }}>
-            <img src={C.logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 128, height: 128, borderRadius: 24, objectFit: "cover", display: "block" }} />
+            <img src={C.logoUrl} alt={"DR. JOURNAL"} style={{ width: 128, height: 128, borderRadius: 24, objectFit: "cover", display: "block" }} />
           </div>
         </div>
         <Card style={{ padding: 32 }}>
@@ -1380,7 +1363,7 @@ function LandingPage({ state, onSignIn, onDemo }) {
       {/* Nav */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 28px", borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 20, background: C.bg + "e6", backdropFilter: "blur(8px)" }}>
         <img src={C.logoUrl} alt="" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover" }} />
-        <div style={{ fontSize: 16, fontWeight: 800, ...gradientTextStyle() }}>{state.siteName || "DR. JOURNAL"}</div>
+        <div style={{ fontSize: 16, fontWeight: 800, ...gradientTextStyle() }}>{"DR. JOURNAL"}</div>
         <div style={{ flex: 1 }} />
         <Btn small variant="ghost" onClick={onSignIn}>Sign In</Btn>
         <Btn small onClick={onDemo}>Explore Demo Data</Btn>
@@ -1459,7 +1442,7 @@ function LandingPage({ state, onSignIn, onDemo }) {
           <ContactCTA kind="mail" />
           <ContactCTA kind="instagram" />
         </div>
-        <div style={{ fontSize: 12, color: C.textDim }}>© {new Date().getFullYear()} {state.siteName || "DR. JOURNAL"} · drjournal.pages.dev</div>
+        <div style={{ fontSize: 12, color: C.textDim }}>© {new Date().getFullYear()} {"DR. JOURNAL"} · drjournal.pages.dev</div>
       </div>
     </div>
   );
@@ -2305,26 +2288,6 @@ function SyncBadge({ status }) {
   return <span title="Cloud sync status" style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap", flexShrink: 0 }}>{s.text}</span>;
 }
 
-// ─── $ / % DISPLAY TOGGLE ─────────────────────────────────────────────────────
-// Global switch between showing trade P&L as dollars or as a percent return
-// on notional — flips the whole app's per-trade money displays over so the
-// focus is on process/risk consistency rather than the raw dollar figure.
-function PnlModeToggle({ state, dispatch }) {
-  const mode = state.pnlDisplayMode || "money";
-  const setMode = (m) => dispatch({ type: "SET_PNL_DISPLAY_MODE", mode: m });
-  const btnStyle = (active) => ({
-    width: 30, height: 26, borderRadius: 7, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800,
-    background: active ? C.accentDim : "transparent", color: active ? C.accent : C.textDim,
-    boxShadow: active ? `0 0 0 1px ${C.accent}55` : "none", transition: "all 0.12s",
-  });
-  return (
-    <div title="Show trade P&L in $ or %" style={{ position: "relative", display: "flex", gap: 3, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3, flexShrink: 0 }}>
-      <button onClick={() => setMode("money")} style={btnStyle(mode === "money")}>$</button>
-      <button onClick={() => setMode("percent")} style={btnStyle(mode === "percent")}>%</button>
-    </div>
-  );
-}
-
 // Compact header toggle — shows the icon for the mode you're currently in
 // (moon = Night, sun = Day); one click flips it. Lives where the $/% P&L
 // toggle used to sit; that control moved into Settings → Appearance.
@@ -2533,7 +2496,7 @@ function Sidebar({ page, setPage, state, dispatch, mobileNavOpen, onClose }) {
       {mobileNavOpen && <div className="sidebar-scrim" onClick={onClose} />}
       <div className={`app-sidebar${mobileNavOpen ? " open" : ""}`} style={{ width: 232, minWidth: 232, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", height: "100%" }}>
         <div style={{ padding: "18px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <img src={C.logoUrl} alt={state.siteName || "DR. JOURNAL"} style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", boxShadow: `0 0 0 1px ${C.border}, 0 0 14px ${C.accent}33`, flexShrink: 0 }} />
+          <img src={C.logoUrl} alt={"DR. JOURNAL"} style={{ width: 64, height: 64, borderRadius: 14, objectFit: "cover", boxShadow: `0 0 0 1px ${C.border}, 0 0 14px ${C.accent}33`, flexShrink: 0 }} />
           <button onClick={onClose} className="sidebar-close-btn" style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer", display: "none" }}>×</button>
         </div>
         <div style={{ padding: "12px 8px", flex: 1, overflowY: "auto" }}>
@@ -5223,7 +5186,7 @@ function Dashboard({ state, dispatch, setPage }) {
               <>
                 {t.pips !== undefined && t.pips !== 0 && <span style={{ fontSize: 12, color: t.pips > 0 ? C.accent : C.red }}>{t.pips > 0 ? "+" : ""}{t.pips} pips</span>}
                 <Badge color={outcomeColor(t.outcome, t.pnl)}>{t.outcome}</Badge>
-                <div className="mono" style={{ fontWeight: 700, fontSize: 16, color: outcomeColor(t.outcome, t.pnl), minWidth: 90, textAlign: "right" }}>{fmtPnlMode(t, state.pnlDisplayMode)}</div>
+                <div className="mono" style={{ fontWeight: 700, fontSize: 16, color: outcomeColor(t.outcome, t.pnl), minWidth: 90, textAlign: "right" }}>{fmtPnlMode(t)}</div>
               </>
             )}
           </div>
@@ -5353,7 +5316,7 @@ function Journal({ state, dispatch, setPage }) {
                       {td(t.risk ? <Badge color={riskColor(t.risk)}>{t.risk}</Badge> : "—")}
                       {td(t.mood ? <Badge color={moodColor(t.mood)}>{t.mood}</Badge> : "—")}
                       {td(t.exitBehavior ? <Badge color={exitBehaviorColor(t.exitBehavior)}>{exitLabel}</Badge> : "—")}
-                      {td(<span className="mono" style={{ fontWeight: 700, color: outcomeColor(t.outcome, t.pnl) }}>{fmtPnlMode(t, state.pnlDisplayMode)}</span>)}
+                      {td(<span className="mono" style={{ fontWeight: 700, color: outcomeColor(t.outcome, t.pnl) }}>{fmtPnlMode(t)}</span>)}
                       {td(t.pips !== undefined && t.pips !== 0 ? <span className="mono" style={{ fontWeight: 700, color: t.pips > 0 ? C.accent : C.red }}>{t.pips > 0 ? "+" : ""}{t.pips}</span> : <span style={{ color: C.textDim }}>—</span>)}
                       {td(t.screenshots?.length > 0 ? <span style={{ color: C.blue }}>📷 {t.screenshots.length}</span> : <span style={{ color: C.textDim }}>—</span>)}
                       {td(t.notes ? <Badge color="#9b6bff">📄 Open</Badge> : <span style={{ color: C.textDim }}>—</span>)}
@@ -6333,7 +6296,7 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{fmtDate(trade.date)} · {trade.symbol}</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 14 }}>
           {[
-            ["NET P&L", fmtPnlMode(trade, state.pnlDisplayMode, netPnl), netPnl >= 0 ? C.accent : C.red],
+            ["NET P&L", fmtPnlMode(trade, netPnl), netPnl >= 0 ? C.accent : C.red],
             ["SIDE", trade.direction.toUpperCase(), trade.direction === "Long" ? C.accent : C.red],
             ["LOTS", trade.size, C.text],
             ["PIPS", trade.pips ? `${trade.pips > 0 ? "+" : ""}${trade.pips}` : "—", trade.pips > 0 ? C.accent : trade.pips < 0 ? C.red : C.text],
@@ -6349,7 +6312,7 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
           ))}
         </div>
         <div style={{ marginTop: 12, fontSize: 11, color: C.textDim }}>
-          GROSS P&L <span style={{ color: grossPnl >= 0 ? C.accent : C.red, fontWeight: 700, fontFamily: "'Inter',sans-serif" }}>{fmtPnlMode(trade, state.pnlDisplayMode, grossPnl)}</span>
+          GROSS P&L <span style={{ color: grossPnl >= 0 ? C.accent : C.red, fontWeight: 700, fontFamily: "'Inter',sans-serif" }}>{fmtPnlMode(trade, grossPnl)}</span>
           {" · "}TOTAL CHARGES <span style={{ color: C.red, fontWeight: 700, fontFamily: "'Inter',sans-serif" }}>${fees.toFixed(2)}</span>
           {mins != null && <span> · HOLD TIME <span style={{ color: C.text, fontWeight: 700 }}>{fmtMin(mins)}</span></span>}
         </div>
@@ -9671,7 +9634,6 @@ function Settings({ state, dispatch }) {
   const [editingAccId, setEditingAccId] = useState(null);
   const [editAccName, setEditAccName] = useState(""), [editAccType, setEditAccType] = useState("Funded"), [editAccColor, setEditAccColor] = useState(ACCOUNT_COLORS[0]);
   const [newSession, setNewSession] = useState(""), [newEmotion, setNewEmotion] = useState("");
-  const [siteNameInput, setSiteNameInput] = useState(state.siteName || "DR. JOURNAL");
   const [clearAllConfirm, setClearAllConfirm] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [toast, setToast] = useState("");
@@ -9713,7 +9675,6 @@ function Settings({ state, dispatch }) {
   const theme = state.theme || { name: "Neon", mode: "night" };
   const setThemeMode = (mode) => dispatch({ type: "SET_THEME", theme: { mode } });
   const setThemeName = (name) => dispatch({ type: "SET_THEME", theme: { name } });
-  const saveSiteName = () => { if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; } dispatch({ type: "SET_SITE_NAME", name: siteNameInput.trim() || "DR. JOURNAL" }); };
   const handleWatermarkUpload = (file) => {
     if (!file) return;
     if (!isPlus(state)) { dispatch({ type: "OPEN_MODAL", modal: "upgrade" }); return; }
@@ -9948,24 +9909,6 @@ function Settings({ state, dispatch }) {
       {tab === "appearance" && (<>
       {/* Appearance */}
       <Card>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ flex: 1 }}><SectionLabel>Site Name</SectionLabel></div>
-          {!isPlus(state) && <PlusBadge small />}
-        </div>
-        {isPlus(state) ? (
-          <>
-            <div style={{ display: "flex", gap: 10, maxWidth: 460 }}>
-              <Inp value={siteNameInput} onChange={setSiteNameInput} placeholder="DR. JOURNAL" style={{ flex: 1 }} />
-              <Btn onClick={saveSiteName}>Save</Btn>
-            </div>
-            <div style={{ fontSize: 12, color: C.textDim, marginTop: 8 }}>Shown in the sidebar and on the sign-in screen.</div>
-          </>
-        ) : (
-          <InlineUpgradeLock dispatch={dispatch} text={`Renaming the app from "${state.siteName || "DR. JOURNAL"}" is a Journal Plus feature.`} />
-        )}
-      </Card>
-
-      <Card>
         <SectionLabel>Theme</SectionLabel>
         <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Pick an accent, then (for Neon) a Night or Day variant — colors and the logo switch together.</div>
 
@@ -10006,12 +9949,6 @@ function Settings({ state, dispatch }) {
             </div>
           </div>
         )}
-      </Card>
-
-      <Card>
-        <SectionLabel>P&amp;L Display</SectionLabel>
-        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Show each trade's P&amp;L in dollars or as a % return. Used across Trades, Dashboard, and trade detail.</div>
-        <PnlModeToggle state={state} dispatch={dispatch} />
       </Card>
 
       <Card>
