@@ -65,6 +65,59 @@ const THEMES = {
   "Slate": { accent: "#42CB91", accentHover: "#34A97A", accent2: "#34D399", accent2Hover: "#22B88A" },
 };
 
+// ── Color math for the Custom theme — derives a full palette from just the
+// 4 colors the person actually picks (background, card, accent, text). ──
+function hexToRgb(hex) {
+  const h = hex.replace("#", "");
+  const n = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const v = parseInt(n, 16);
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+}
+function rgbToHex(r, g, b) {
+  const c = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+function mixHex(hexA, hexB, t) {
+  const a = hexToRgb(hexA), b = hexToRgb(hexB);
+  return rgbToHex(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
+}
+const lighten = (hex, t) => mixHex(hex, "#ffffff", t);
+const darken = (hex, t) => mixHex(hex, "#000000", t);
+function hexLuminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+const DEFAULT_CUSTOM_THEME = { bg: "#000000", surface: "#0A0A0A", accent: "#A1E503", text: "#FEFEFE" };
+// Builds a full base palette (border/muted-text/semantic colors/etc.) from
+// the 4 colors a person picks for the Custom theme, so they get a coherent
+// full theme without having to individually tune a dozen supporting colors.
+function buildCustomBase(custom) {
+  const c = { ...DEFAULT_CUSTOM_THEME, ...custom };
+  const dark = hexLuminance(c.bg) < 0.5;
+  const tint = dark ? lighten : darken; // direction to nudge bg for surfaceHigh/border
+  const mutedMix = dark ? darken : lighten; // direction to nudge text for muted/dim text
+  return {
+    bg: c.bg, surface: c.surface, surfaceHigh: tint(c.surface, 0.18),
+    border: tint(c.bg, 0.16), borderLight: tint(c.bg, 0.26),
+    text: c.text, textMuted: mutedMix(c.text, 0.35), textDim: mutedMix(c.text, 0.58),
+    sidebar: c.bg,
+    // Semantic colors aren't user-picked — loss/warning/info stay recognizable
+    // conventions, just tuned bright-for-dark or deep-for-light like the
+    // built-in themes do, so they keep contrast against a custom background.
+    purple: dark ? "#B026FF" : "#7A1FCC", purpleDim: (dark ? "#B026FF" : "#7A1FCC") + "1f",
+    red: dark ? "#FF2965" : "#D6003C", redDim: (dark ? "#FF2965" : "#D6003C") + "22",
+    yellow: dark ? "#FFD400" : "#9C7300", yellowDim: (dark ? "#FFD400" : "#9C7300") + "22",
+    blue: dark ? "#00E5FF" : "#0088B3", blueDim: (dark ? "#00E5FF" : "#0088B3") + "22",
+    logoUrl: dark ? logoUrl : logoUrlDay,
+  };
+}
+function buildCustomTheme(custom) {
+  const c = { ...DEFAULT_CUSTOM_THEME, ...custom };
+  const dark = hexLuminance(c.bg) < 0.5;
+  const hoverMix = dark ? darken : lighten;
+  return { accent: c.accent, accentHover: hoverMix(c.accent, 0.14), accent2: lighten(c.accent, 0.25), accent2Hover: hoverMix(lighten(c.accent, 0.25), 0.14) };
+}
+
 // Gradient wordmark style (neon green → spring green), matching the Dr. Journal logo.
 // A function (not a static object) because C's colors are mutated by applyTheme() —
 // this must be re-evaluated at render time to pick up the active theme's colors.
@@ -75,9 +128,9 @@ const gradientTextStyle = () => ({
   backgroundClip: "text",
 });
 
-function applyTheme(themeName = "Neon", mode = "night", transparency = 0, popupTransparency = 0) {
-  const theme = THEMES[themeName] || THEMES["Neon"];
-  const base = themeName === "Slate" ? SLATE_BASE : (mode === "day" ? DAY_BASE : NIGHT_BASE);
+function applyTheme(themeName = "Neon", mode = "night", transparency = 0, popupTransparency = 0, customTheme = null) {
+  const theme = themeName === "Custom" ? buildCustomTheme(customTheme) : (THEMES[themeName] || THEMES["Neon"]);
+  const base = themeName === "Custom" ? buildCustomBase(customTheme) : themeName === "Slate" ? SLATE_BASE : (mode === "day" ? DAY_BASE : NIGHT_BASE);
   Object.assign(C, base, theme, { accentDim: theme.accent + "22", accent2Dim: theme.accent2 + "22" });
   // Interface Transparency (Settings → adjustable 0–90): 0 = fully solid
   // panels, 90 = nearly invisible. Cards and their sub-panels (surfaceHigh)
@@ -723,6 +776,7 @@ function defaultState() {
     ritualLog: {}, // { "2026-08-06_London": { intention, skipped, completedAt } }
     plan: "free", // "free" (Journal Basic) | "plus" (Journal Plus $10/mo)
     theme: { name: "Neon", mode: "night" },
+    customTheme: null, // { bg, surface, accent, text } — set once the person picks colors for the Custom theme
     themeSchemaVersion: THEME_SCHEMA_VERSION,
     uiTransparency: 40,
     popupTransparency: 10,
@@ -910,6 +964,7 @@ function reducer(state, action) {
     case "CLOSE_MODAL": next = { ...state, modal: null }; break;
     case "IMPORT_DATA": next = { ...action.data, currentUser: state.currentUser, modal: null }; break;
     case "SET_THEME": next = { ...state, theme: { ...state.theme, ...action.theme } }; break;
+    case "SET_CUSTOM_THEME": next = { ...state, customTheme: { ...DEFAULT_CUSTOM_THEME, ...state.customTheme, ...action.colors } }; break;
     case "SET_TRANSPARENCY": next = { ...state, uiTransparency: action.value }; break;
     case "SET_POPUP_TRANSPARENCY": next = { ...state, popupTransparency: action.value }; break;
     case "SET_RITUAL_ENABLED": next = { ...state, ritual: { ...state.ritual, enabled: action.enabled } }; break;
@@ -9622,6 +9677,39 @@ function LocalBackupsList({ state, dispatch, notify }) {
 }
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
+// Color-picker panel for the Custom theme — 4 colors (background, card,
+// accent, text) are all a person needs to pick; buildCustomBase/buildCustomTheme
+// derive the rest (borders, muted text, hover states) automatically.
+function CustomThemeEditor({ state, dispatch }) {
+  const c = { ...DEFAULT_CUSTOM_THEME, ...state.customTheme };
+  const setColor = (key, value) => dispatch({ type: "SET_CUSTOM_THEME", colors: { [key]: value } });
+  const fields = [
+    { key: "bg", label: "Background" },
+    { key: "surface", label: "Card" },
+    { key: "accent", label: "Accent" },
+    { key: "text", label: "Text" },
+  ];
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, maxWidth: 600, marginBottom: 14 }}>
+        {fields.map(f => (
+          <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px" }}>
+            <label style={{ position: "relative", width: 34, height: 34, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}`, flexShrink: 0, cursor: "pointer", background: c[f.key] }}>
+              <input type="color" value={c[f.key]} onChange={e => setColor(f.key, e.target.value)} style={{ position: "absolute", inset: -4, width: "calc(100% + 8px)", height: "calc(100% + 8px)", border: "none", padding: 0, cursor: "pointer" }} />
+            </label>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10.5, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{f.label}</div>
+              <input value={c[f.key]} onChange={e => { const v = e.target.value; if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setColor(f.key, v); }}
+                className="mono" style={{ background: "transparent", border: "none", color: C.text, fontSize: 13, fontWeight: 700, outline: "none", width: "100%", padding: 0 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <Btn small variant="ghost" onClick={() => dispatch({ type: "SET_CUSTOM_THEME", colors: DEFAULT_CUSTOM_THEME })}>Reset to defaults</Btn>
+    </div>
+  );
+}
+
 function Settings({ state, dispatch }) {
   const { accounts = [], sessions = [], emotions = [] } = state;
   const [newAccName, setNewAccName] = useState(""), [newAccType, setNewAccType] = useState("Funded"), [newAccColor, setNewAccColor] = useState(ACCOUNT_COLORS[0]);
@@ -9904,12 +9992,14 @@ function Settings({ state, dispatch }) {
       {/* Appearance */}
       <Card>
         <SectionLabel>Theme</SectionLabel>
-        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Pick an accent, then (for Neon) a Night or Day variant — colors and the logo switch together.</div>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Pick an accent, then (for Neon) a Night or Day variant, or build your own with Custom — colors and the logo switch together.</div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, maxWidth: 460, marginBottom: 18 }}>
-          {Object.entries(THEMES).map(([name, t]) => {
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, maxWidth: 600, marginBottom: 18 }}>
+          {["Neon", "Slate", "Custom"].map(name => {
             const active = theme.name === name;
-            const swatchBg = name === "Slate" ? "#0F172B" : "#0A0A0A";
+            const t = name === "Custom" ? buildCustomTheme(state.customTheme) : THEMES[name];
+            const swatchBg = name === "Slate" ? "#0F172B" : name === "Custom" ? (state.customTheme?.bg || DEFAULT_CUSTOM_THEME.bg) : "#0A0A0A";
+            const sub = name === "Slate" ? "Navy · dark only" : name === "Custom" ? "Pick your own colors" : "Black & white · Night/Day";
             return (
               <div key={name} onClick={() => setThemeName(name)} style={{ border: `2px solid ${active ? t.accent : C.border}`, borderRadius: 12, padding: "14px 12px", textAlign: "center", cursor: "pointer", background: active ? t.accent + "0f" : "transparent" }}>
                 <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 10 }}>
@@ -9917,15 +10007,17 @@ function Settings({ state, dispatch }) {
                   <div style={{ width: 22, height: 22, borderRadius: "50%", background: t.accent, boxShadow: active ? `0 0 8px ${t.accent}88` : "none" }} />
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: active ? t.accent : C.text }}>{name}</div>
-                <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{name === "Slate" ? "Navy · dark only" : "Black & white · Night/Day"}</div>
+                <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{sub}</div>
               </div>
             );
           })}
         </div>
 
-        {theme.name === "Slate" ? (
+        {theme.name === "Slate" && (
           <div style={{ fontSize: 11.5, color: C.textDim, background: C.surfaceHigh, borderRadius: 10, padding: "10px 14px", maxWidth: 460 }}>Slate is a single dark palette — Night/Day mode doesn't apply while it's selected.</div>
-        ) : (
+        )}
+
+        {theme.name === "Neon" && (
           <div style={{ display: "flex", borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, maxWidth: 460 }}>
             <div onClick={() => setThemeMode("night")} style={{ flex: 1, padding: "18px 0", textAlign: "center", cursor: "pointer", background: theme.mode !== "day" ? C.accentDim : "transparent", borderRight: `1px solid ${C.border}` }}>
               <div style={{ display: "flex", justifyContent: "center", gap: 5, marginBottom: 10 }}>
@@ -9943,6 +10035,8 @@ function Settings({ state, dispatch }) {
             </div>
           </div>
         )}
+
+        {theme.name === "Custom" && <CustomThemeEditor state={state} dispatch={dispatch} />}
       </Card>
 
       <Card>
@@ -10455,7 +10549,7 @@ export default function App() {
     tag.content = "width=device-width, initial-scale=1, viewport-fit=cover";
   }, []);
 
-  applyTheme(state.theme?.name, state.theme?.mode, state.uiTransparency, state.popupTransparency);
+  applyTheme(state.theme?.name, state.theme?.mode, state.uiTransparency, state.popupTransparency, state.customTheme);
 
   // Check for shared trade link
   const hash = window.location.hash;
