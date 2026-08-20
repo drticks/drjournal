@@ -1310,7 +1310,13 @@ function EquityCurveChart({ trades, height = 300 }) {
 }
 
 
-function AuthScreen({ state, dispatch }) {
+const CompassIcon = ({ size = 16, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M15.5 8.5 13 13l-4.5 2.5L11 11l4.5-2.5Z" fill={color} stroke="none" />
+  </svg>
+);
+function AuthScreen({ state, dispatch, onDemo }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState(""), [password, setPassword] = useState(""), [name, setName] = useState(""), [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1363,6 +1369,17 @@ function AuthScreen({ state, dispatch }) {
           </div>
           <Btn variant="ghost" onClick={() => { if (mode === "login") { setShowSignupNotice(true); return; } setMode("login"); setError(""); }} style={{ width: "100%", justifyContent: "center" }}>{mode === "login" ? "Need an account? Sign up" : "Already have an account? Sign in"}</Btn>
         </Card>
+        {onDemo && (
+          <button onClick={onDemo} style={{
+            width: "100%", marginTop: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
+            background: "transparent", border: `1.5px dashed ${C.border}`, borderRadius: 14, color: C.textMuted,
+            fontSize: 14, fontWeight: 700, padding: "14px 0", cursor: "pointer", transition: "border-color 0.15s, color 0.15s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent + "88"; e.currentTarget.style.color = C.text; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMuted; }}>
+            <CompassIcon size={17} color={C.accent} /> Explore Website with Demo Data
+          </button>
+        )}
         <div style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: C.textDim }}>Contact To Sign Up: itsdrticks@gmail.com </div>
         <div style={{ textAlign: "center", marginTop: 8 }}>
           <ContactCTA kind="instagram" style={{ fontSize: 12, padding: "7px 14px" }} />
@@ -10651,7 +10668,7 @@ export default function App() {
               onSignIn={() => setShowLanding(false)}
               onDemo={() => { dispatch({ type: "ENTER_DEMO", data: buildDemoState() }); setShowLanding(false); }}
             />
-          ) : <AuthScreen state={state} dispatch={dispatch} />}
+          ) : <AuthScreen state={state} dispatch={dispatch} onDemo={() => dispatch({ type: "ENTER_DEMO", data: buildDemoState() })} />}
         </div>
       </div>
     </>
