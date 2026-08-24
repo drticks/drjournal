@@ -298,6 +298,20 @@ const PlusBadge = ({ small }) => (
   <span style={{ background: `linear-gradient(90deg, ${C.blue}, ${C.purple})`, color: "#fff", fontSize: small ? 8 : 9, fontWeight: 800, letterSpacing: 0.5, padding: small ? "1px 6px" : "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>✨ PLUS</span>
 );
 
+// Shows the uploaded profile picture if one's set, otherwise the colored
+// initial-letter circle — used in the header dropdown, its panel, and the
+// sidebar account card, so all three stay in sync automatically.
+const UserAvatar = ({ state, size = 24, fontSize = 12 }) => {
+  const initial = (state.currentUser?.name || state.currentUser?.email || "?").charAt(0).toUpperCase();
+  return state.profileAvatar ? (
+    <img src={state.profileAvatar} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+  ) : (
+    <span style={{ width: size, height: size, borderRadius: "50%", background: C.accentDim, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize, fontWeight: 800, flexShrink: 0 }}>
+      {initial}
+    </span>
+  );
+};
+
 // ── BRAND CONTACT/SOCIAL ICONS (inline SVG, not emoji) ────────────────────
 const MailIcon = ({ size = 14, color = "currentColor" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -777,6 +791,8 @@ function defaultState() {
     plan: "free", // "free" (Journal Basic) | "plus" (Journal Plus $10/mo)
     theme: { name: "Neon", mode: "night" },
     customTheme: null, // { bg, surface, accent, text } — set once the person picks colors for the Custom theme
+    userHandle: "", // e.g. "saood123", shown with an @ prefix
+    profileAvatar: null, // data URL of an uploaded profile picture, or null for the initial-letter fallback
     themeSchemaVersion: THEME_SCHEMA_VERSION,
     uiTransparency: 40,
     popupTransparency: 10,
@@ -911,6 +927,8 @@ function reducer(state, action) {
     case "LOGIN": next = { ...state, currentUser: action.user, modal: "welcome" }; break;
     case "LOGOUT": next = { ...state, currentUser: null }; break;
     case "SET_USER_NAME": next = { ...state, currentUser: { ...state.currentUser, name: action.name } }; break;
+    case "SET_USER_HANDLE": next = { ...state, userHandle: action.handle }; break;
+    case "SET_PROFILE_AVATAR": next = { ...state, profileAvatar: action.dataUrl }; break;
     // Wipes every trade, account, note, strategy, prop firm, payout, and
     // capital transaction — resets to the same zero-state a brand-new
     // signup gets (see blankState()) — but keeps the person logged in on
@@ -2490,9 +2508,7 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
       {/* Session control */}
       <div style={{ position: "relative" }}>
         <button onClick={() => setUserOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, fontWeight: 600, padding: "6px 12px 6px 8px", cursor: "pointer" }}>
-          <span style={{ width: 24, height: 24, borderRadius: "50%", background: C.accentDim, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
-            {(currentUser?.name || currentUser?.email || "?").charAt(0).toUpperCase()}
-          </span>
+          <UserAvatar state={state} size={24} fontSize={12} />
           <span style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser?.name || "Account"}</span>
           <span style={{ fontSize: 9, color: C.textDim }}>▾</span>
         </button>
@@ -2500,10 +2516,15 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
           <>
             <div onClick={() => setUserOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 39 }} />
             <div className="fade-in" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 210, background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 6, boxShadow: "0 12px 30px #000a", zIndex: 40 }}>
-              <div style={{ padding: "8px 10px 10px", borderBottom: `1px solid ${C.border}`, marginBottom: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{currentUser?.name}</div>
-                <div style={{ fontSize: 11, color: C.textDim }}>{currentUser?.email}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 10px", borderBottom: `1px solid ${C.border}`, marginBottom: 6 }}>
+                <UserAvatar state={state} size={36} fontSize={15} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser?.name}</div>
+                  {state.userHandle && <div style={{ fontSize: 11.5, color: C.accent, fontWeight: 600 }}>@{state.userHandle}</div>}
+                  <div style={{ fontSize: 11, color: C.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser?.email}</div>
+                </div>
               </div>
+              <div onClick={() => { setPage("settings"); setUserOpen(false); }} style={{ padding: "8px 10px", borderRadius: 7, cursor: "pointer", fontSize: 13, color: C.text, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}><NavIcon name="settings" size={14} /> Settings</div>
               {currentUser && (
                 <div onClick={async () => { await supabase.auth.signOut(); dispatch({ type: "LOGOUT" }); setUserOpen(false); }} style={{ padding: "8px 10px", borderRadius: 7, cursor: "pointer", fontSize: 13, color: C.red, fontWeight: 600 }}>⏻ Sign Out</div>
               )}
@@ -9737,6 +9758,9 @@ function Settings({ state, dispatch }) {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [toast, setToast] = useState("");
   const [displayNameInput, setDisplayNameInput] = useState(state.currentUser?.name || "");
+  const [handleInput, setHandleInput] = useState(state.userHandle || "");
+  const [handleError, setHandleError] = useState("");
+  const avatarFileRef = useRef();
   const [newPassword, setNewPassword] = useState(""), [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState(""), [savingPassword, setSavingPassword] = useState(false);
   const fileRef = useRef();
@@ -9757,6 +9781,21 @@ function Settings({ state, dispatch }) {
     if (error) { notify("Couldn't update name. Try again."); return; }
     dispatch({ type: "SET_USER_NAME", name });
     notify("✓ Display name updated.");
+  };
+
+  const saveHandle = () => {
+    const raw = handleInput.trim().replace(/^@/, "");
+    if (!raw) { dispatch({ type: "SET_USER_HANDLE", handle: "" }); setHandleError(""); notify("✓ Handle removed."); return; }
+    if (!/^[a-z0-9_]{3,20}$/i.test(raw)) { setHandleError("3-20 characters — letters, numbers, and underscores only."); return; }
+    setHandleError("");
+    dispatch({ type: "SET_USER_HANDLE", handle: raw.toLowerCase() });
+    notify("✓ Handle updated.");
+  };
+  const handleAvatarUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => { dispatch({ type: "SET_PROFILE_AVATAR", dataUrl: e.target.result }); notify("✓ Profile picture updated."); };
+    reader.readAsDataURL(file);
   };
 
   const updatePassword = async () => {
@@ -9884,14 +9923,44 @@ function Settings({ state, dispatch }) {
       {/* Account */}
       <Card>
         <SectionLabel>Account</SectionLabel>
-        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 16 }}>Your display name and email. Email is used to sign in and can't be changed here.</div>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 16 }}>Your profile picture, name, handle, and email. Email is used to sign in and can't be changed here.</div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+          <div onClick={() => avatarFileRef.current?.click()} style={{ position: "relative", cursor: "pointer", flexShrink: 0 }}>
+            <UserAvatar state={state} size={64} fontSize={24} />
+            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.15s" }}
+              onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+              <span style={{ fontSize: 10, color: "#fff", fontWeight: 700 }}>Edit</span>
+            </div>
+          </div>
+          <div>
+            <Btn small variant="ghost" onClick={() => avatarFileRef.current?.click()}>Upload Photo</Btn>
+            {state.profileAvatar && <Btn small variant="ghost" onClick={() => dispatch({ type: "SET_PROFILE_AVATAR", dataUrl: null })} style={{ marginLeft: 8, color: C.red }}>Remove</Btn>}
+            <div style={{ fontSize: 11, color: C.textDim, marginTop: 6 }}>JPG or PNG, shown across the app.</div>
+          </div>
+          <input ref={avatarFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { handleAvatarUpload(e.target.files[0]); e.target.value = ""; }} />
+        </div>
+
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 6 }}>Email</label>
           <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C.textMuted, maxWidth: 460 }}>{state.currentUser?.email || "—"}</div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap", marginBottom: 18 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap", marginBottom: 16 }}>
           <Inp label="Display Name" value={displayNameInput} onChange={setDisplayNameInput} placeholder="Your name" style={{ maxWidth: 300 }} />
           <Btn onClick={saveDisplayName} disabled={!displayNameInput.trim() || displayNameInput.trim() === state.currentUser?.name}>Save</Btn>
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap" }}>
+            <div>
+              <label style={{ fontSize: 11, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 6 }}>Handle</label>
+              <div style={{ display: "flex", alignItems: "center", background: C.surfaceHigh, border: `1px solid ${handleError ? C.red : C.border}`, borderRadius: 8, padding: "0 12px", maxWidth: 300 }}>
+                <span style={{ color: C.textDim, fontSize: 14 }}>@</span>
+                <input value={handleInput} onChange={e => setHandleInput(e.target.value.replace(/\s/g, ""))} placeholder="yourhandle" style={{ flex: 1, background: "transparent", border: "none", color: C.text, padding: "10px 6px", fontSize: 14, outline: "none" }} />
+              </div>
+            </div>
+            <Btn onClick={saveHandle} disabled={handleInput.trim().replace(/^@/, "") === (state.userHandle || "")}>Save</Btn>
+          </div>
+          {handleError ? <div style={{ fontSize: 11.5, color: C.red, marginTop: 6 }}>{handleError}</div> : <div style={{ fontSize: 11, color: C.textDim, marginTop: 6 }}>Shown under your name in the account menu.</div>}
         </div>
 
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 18 }}>
