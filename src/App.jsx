@@ -701,6 +701,35 @@ async function fetchSharedMonth(id) {
   return data.data;
 }
 
+// Public profiles — keyed by lowercase handle. Only kept in sync with
+// Supabase while the person has both a handle set AND Public Profile turned
+// on (see the effect in App() and buildPublicProfilePayload below); the row
+// is deleted the moment either condition stops being true, so nothing
+// lingers publicly after someone goes private.
+async function upsertPublicProfile(handle, data) {
+  const { error } = await supabase.from("public_profiles").upsert({ handle: handle.toLowerCase(), data, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+async function deletePublicProfile(handle) {
+  if (!handle) return;
+  await supabase.from("public_profiles").delete().eq("handle", handle.toLowerCase());
+}
+async function fetchPublicProfile(handle) {
+  const { data, error } = await supabase.from("public_profiles").select("data").eq("handle", handle.toLowerCase()).single();
+  if (error) return null;
+  return data.data;
+}
+// Prefix search on handle, e.g. "sao" -> "saood123". Also matches display
+// name as a secondary signal so a search for "Alex" can still surface
+// someone whose handle doesn't contain "alex".
+async function searchPublicProfiles(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const { data, error } = await supabase.from("public_profiles").select("handle, data").or(`handle.ilike.${q}%,data->>name.ilike.%${q}%`).limit(20);
+  if (error) return [];
+  return data.map(r => ({ handle: r.handle, ...r.data }));
+}
+
 function genDemoData() {
   const symbols = ["MGC", "ES", "GC", "CL", "MMGC", "MES"];
   const setups = ["Celery", "Breakout", "Onion", "Fade", "Inverted Celery"];
@@ -793,6 +822,7 @@ function defaultState() {
     customTheme: null, // { bg, surface, accent, text } — set once the person picks colors for the Custom theme
     userHandle: "", // e.g. "saood123", shown with an @ prefix
     profileAvatar: null, // data URL of an uploaded profile picture, or null for the initial-letter fallback
+    profilePublic: false, // when true (and a handle is set), a safe snapshot syncs to the public_profiles table so others can find/view it
     themeSchemaVersion: THEME_SCHEMA_VERSION,
     uiTransparency: 40,
     popupTransparency: 10,
@@ -929,6 +959,7 @@ function reducer(state, action) {
     case "SET_USER_NAME": next = { ...state, currentUser: { ...state.currentUser, name: action.name } }; break;
     case "SET_USER_HANDLE": next = { ...state, userHandle: action.handle }; break;
     case "SET_PROFILE_AVATAR": next = { ...state, profileAvatar: action.dataUrl }; break;
+    case "SET_PROFILE_PUBLIC": next = { ...state, profilePublic: action.value }; break;
     // Wipes every trade, account, note, strategy, prop firm, payout, and
     // capital transaction — resets to the same zero-state a brand-new
     // signup gets (see blankState()) — but keeps the person logged in on
@@ -4072,6 +4103,27 @@ function buildMonthSharePayload(state, current) {
   };
 }
 
+// Public-profile snapshot — deliberately excludes notes, mood, and
+// screenshots even though the person has opted in to a public profile;
+// those stay private regardless (only the trade facts themselves, which is
+// what "see my trades" means here, are exposed).
+function buildPublicProfilePayload(state) {
+  const stats = calcStats(state.trades);
+  const sorted = [...state.trades].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const recentTrades = sorted.slice(0, 15).map(t => ({
+    symbol: t.symbol, direction: t.direction, date: t.date, outcome: t.outcome,
+    pnl: t.pnl - (parseFloat(t.fees) || 0), pips: t.pips,
+  }));
+  let streak = 0;
+  for (const t of sorted) { if (t.outcome === "Win") streak++; else break; }
+  return {
+    name: state.currentUser?.name || "Trader",
+    avatarUrl: state.profileAvatar || null,
+    netPnl: stats.netPnl, winRate: stats.winRate, profitFactor: stats.profitFactor,
+    totalTrades: state.trades.length, streak, recentTrades,
+  };
+}
+
 async function renderMonthShareCardPNG(monthPayload) {
   if (document.fonts?.ready) { try { await document.fonts.ready; } catch {} }
   const layout = shareMonthCardLayout(monthPayload.cells.length);
@@ -4717,6 +4769,81 @@ function PublicMonthView({ id }) {
       </Card>
 
       <div style={{ textAlign: "center", marginTop: 24, fontSize: 12, color: C.textDim }}>Shared via DR. JOURNAL Trading Journal</div>
+    </div>
+  );
+}
+
+// ─── PUBLIC PROFILE VIEW ──────────────────────────────────────────────────────
+// Renders as a full page when reached via #profile=handle (onClose omitted),
+// or as an in-app modal when opened from a search result (onClose provided).
+// Only ever shows what buildPublicProfilePayload put in the snapshot — no
+// notes, mood, or screenshots, regardless of what the profile owner logs.
+function PublicProfileView({ handle, onClose }) {
+  const [profile, setProfile] = useState(undefined); // undefined = loading, null = not found/private
+  useEffect(() => { fetchPublicProfile(handle).then(setProfile); }, [handle]);
+
+  const body = () => {
+    if (profile === undefined) return <SpadeLoader label="Loading profile…" />;
+    if (!profile) return (
+      <div style={{ textAlign: "center", padding: 60 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>@{handle} isn't public</div>
+        <div style={{ fontSize: 13, color: C.textDim }}>This profile doesn't exist, or its owner has kept it private.</div>
+      </div>
+    );
+    const { name, avatarUrl, netPnl, winRate, profitFactor, totalTrades, streak, recentTrades } = profile;
+    return (
+      <>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px" }} />
+          ) : (
+            <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.accentDim, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, margin: "0 auto 12px" }}>{name.charAt(0).toUpperCase()}</div>
+          )}
+          <div style={{ fontSize: 19, fontWeight: 800 }}>{name}</div>
+          <div style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>@{handle}</div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 20 }}>
+          <StatCard label="Net P&L" value={fmt$(netPnl)} color={netPnl >= 0 ? C.accent : C.red} />
+          <StatCard label="Win Rate" value={`${winRate.toFixed(1)}%`} />
+          <StatCard label="Profit Factor" value={profitFactor >= 99 ? "∞" : profitFactor.toFixed(2)} />
+          <StatCard label="Total Trades" value={totalTrades} />
+          <StatCard label="Win Streak" value={streak} color={streak >= 3 ? C.accent : C.text} />
+        </div>
+
+        {recentTrades.length > 0 && (
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Recent Trades</div>
+            {recentTrades.map((t, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 18px", borderTop: i ? `1px solid ${C.border}20` : "none" }}>
+                <Badge color={t.direction === "Long" ? C.accent : C.red}>{t.direction}</Badge>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>{t.symbol}</div>
+                <div style={{ fontSize: 11, color: C.textDim }}>{fmtDate(t.date)}</div>
+                <Badge color={outcomeColor(t.outcome, t.pnl)}>{t.outcome}</Badge>
+                <div className="mono" style={{ fontWeight: 700, fontSize: 13, color: outcomeColor(t.outcome, t.pnl), minWidth: 74, textAlign: "right" }}>{fmt$(t.pnl)}</div>
+              </div>
+            ))}
+          </Card>
+        )}
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 11.5, color: C.textDim }}>Notes and screenshots stay private — only trade results are shown on public profiles.</div>
+      </>
+    );
+  };
+
+  if (onClose) {
+    return (
+      <ShareStepChrome icon={<NavIcon name="mynotes" size={18} />} title={`@${handle}`} onClose={onClose} maxWidth={480}>
+        {body()}
+      </ShareStepChrome>
+    );
+  }
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, padding: 28, maxWidth: 640, margin: "0 auto" }}>
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <img src={C.logoUrl} alt="" style={{ width: 40, height: 40, borderRadius: 11, marginBottom: 8, objectFit: "cover" }} />
+        <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 3, textTransform: "uppercase" }}>DR. JOURNAL Public Profile</div>
+      </div>
+      {body()}
     </div>
   );
 }
@@ -9761,6 +9888,20 @@ function Settings({ state, dispatch }) {
   const [handleInput, setHandleInput] = useState(state.userHandle || "");
   const [handleError, setHandleError] = useState("");
   const avatarFileRef = useRef();
+  const [traderSearch, setTraderSearch] = useState("");
+  const [traderResults, setTraderResults] = useState([]);
+  const [traderSearching, setTraderSearching] = useState(false);
+  const [viewingHandle, setViewingHandle] = useState(null);
+  const [copiedProfileLink, setCopiedProfileLink] = useState(false);
+  useEffect(() => {
+    const q = traderSearch.trim();
+    if (!q) { setTraderResults([]); return; }
+    setTraderSearching(true);
+    const t = setTimeout(() => {
+      searchPublicProfiles(q).then(r => { setTraderResults(r); setTraderSearching(false); });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [traderSearch]);
   const [newPassword, setNewPassword] = useState(""), [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState(""), [savingPassword, setSavingPassword] = useState(false);
   const fileRef = useRef();
@@ -9974,6 +10115,67 @@ function Settings({ state, dispatch }) {
           </div>
         </div>
       </Card>
+
+      <Card>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 4 }}>
+          <div>
+            <SectionLabel>Public Profile</SectionLabel>
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>Let other traders find you by handle and see your trade results.</div>
+          </div>
+          <label style={{ position: "relative", display: "inline-block", width: 42, height: 24, flexShrink: 0, cursor: state.userHandle ? "pointer" : "not-allowed", opacity: state.userHandle ? 1 : 0.5 }}>
+            <input type="checkbox" checked={state.profilePublic} disabled={!state.userHandle} onChange={e => dispatch({ type: "SET_PROFILE_PUBLIC", value: e.target.checked })} style={{ opacity: 0, width: 0, height: 0 }} />
+            <span style={{ position: "absolute", inset: 0, background: state.profilePublic ? C.accent : C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 24, transition: "background 0.15s" }}>
+              <span style={{ position: "absolute", top: 2, left: state.profilePublic ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: state.profilePublic ? "#000" : C.textMuted, transition: "left 0.15s" }} />
+            </span>
+          </label>
+        </div>
+
+        {!state.userHandle && <div style={{ fontSize: 11.5, color: C.textDim, marginBottom: 10 }}>Set a handle above first — that's what people will search for.</div>}
+
+        <div style={{ fontSize: 11.5, color: C.textDim, marginBottom: state.profilePublic ? 14 : 0 }}>
+          Visible when public: name, photo, net P&amp;L, win rate, profit factor, win streak, and your 15 most recent trades. Notes, moods, and screenshots always stay private.
+        </div>
+
+        {state.profilePublic && state.userHandle && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="mono" style={{ flex: 1, minWidth: 200, background: C.bg, border: `1px solid ${C.accent}30`, borderRadius: 8, padding: "9px 12px", fontSize: 12, color: C.textMuted, wordBreak: "break-all" }}>
+              {`${window.location.origin}${window.location.pathname}#profile=${state.userHandle}`}
+            </div>
+            <Btn small onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#profile=${state.userHandle}`);
+              setCopiedProfileLink(true); setTimeout(() => setCopiedProfileLink(false), 2000);
+            }}>{copiedProfileLink ? "✓ Copied!" : "Copy Link"}</Btn>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <SectionLabel>Find Traders</SectionLabel>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14 }}>Search by @handle to view a trader's public profile.</div>
+        <div style={{ position: "relative", maxWidth: 380, marginBottom: traderResults.length ? 14 : 0 }}>
+          <input value={traderSearch} onChange={e => setTraderSearch(e.target.value)} placeholder="Search by handle or name…" style={{ width: "100%", boxSizing: "border-box", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 999, color: C.text, padding: "10px 14px 10px 34px", fontSize: 13, outline: "none" }} />
+          <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textDim }}>⌕</span>
+        </div>
+        {traderSearching && <div style={{ fontSize: 12, color: C.textDim }}>Searching…</div>}
+        {!traderSearching && traderSearch.trim() && traderResults.length === 0 && <div style={{ fontSize: 12, color: C.textDim }}>No public profiles match "{traderSearch.trim()}".</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 380 }}>
+          {traderResults.map(r => (
+            <div key={r.handle} onClick={() => setViewingHandle(r.handle)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, cursor: "pointer", background: C.surfaceHigh, border: `1px solid ${C.border}` }}>
+              {r.avatarUrl ? (
+                <img src={r.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <span style={{ width: 32, height: 32, borderRadius: "50%", background: C.accentDim, color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{r.name?.charAt(0).toUpperCase()}</span>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                <div style={{ fontSize: 11.5, color: C.accent }}>@{r.handle}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {viewingHandle && <PublicProfileView handle={viewingHandle} onClose={() => setViewingHandle(null)} />}
 
       </>)}
 
@@ -10521,6 +10723,10 @@ export default function App() {
   // The save effect below reads and immediately resets this — it's the only
   // way an empty state is ever allowed to be pushed to Supabase.
   const allowEmptySaveRef = useRef(false);
+  // Tracks whichever handle is currently live in the public_profiles table,
+  // so the public-profile sync effect can clean up the old row if the
+  // handle changes or Public Profile gets turned off.
+  const prevPublicHandleRef = useRef(null);
   const dispatch = useCallback(action => {
     if (action.type === "CLEAR_ALL_DATA") allowEmptySaveRef.current = true;
     setRawState(prev => reducer(prev, action));
@@ -10607,6 +10813,32 @@ export default function App() {
     }
   }, [state, cloudLoaded]);
 
+  // ── Keep the public profile snapshot in sync while Public Profile is on ──
+  // Debounced so rapid trade edits don't spam Supabase. Deletes the row the
+  // moment Public Profile is turned off, or re-keys it if the handle changes
+  // while public — never leaves a stale/orphaned public row behind. Skipped
+  // entirely in demo mode (isDemo users never touch Supabase at all).
+  useEffect(() => {
+    if (state.isDemo || !state.currentUser?.id) return;
+    const shouldBePublic = state.profilePublic && !!state.userHandle;
+    const t = setTimeout(async () => {
+      try {
+        if (shouldBePublic) {
+          if (prevPublicHandleRef.current && prevPublicHandleRef.current !== state.userHandle) {
+            await deletePublicProfile(prevPublicHandleRef.current);
+          }
+          await upsertPublicProfile(state.userHandle, buildPublicProfilePayload(state));
+          prevPublicHandleRef.current = state.userHandle;
+        } else if (prevPublicHandleRef.current) {
+          await deletePublicProfile(prevPublicHandleRef.current);
+          prevPublicHandleRef.current = null;
+        }
+      } catch {} // best-effort — a sync hiccup here shouldn't disrupt the app
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.profilePublic, state.userHandle, state.trades, state.currentUser?.name, state.profileAvatar, state.currentUser?.id, state.isDemo]);
+
   // ── Reliable flush right before the tab actually goes away ──────────────
   // The debounced save above can lose a race if the tab is closed within
   // its window. visibilitychange/pagehide fire while the page is still
@@ -10660,6 +10892,20 @@ export default function App() {
           <PlanAnnouncementBanner />
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
            <PublicMonthView id={hash.slice(12)} />
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (hash.startsWith("#profile=")) {
+    return (
+      <>
+        <style>{buildGlobalCSS()}</style>
+        <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+          <PlanAnnouncementBanner />
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+           <PublicProfileView handle={hash.slice(9)} />
           </div>
         </div>
       </>
