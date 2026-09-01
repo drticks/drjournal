@@ -196,6 +196,19 @@ function buildGlobalCSS() {
   @keyframes livePulse{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
   .fade-in{animation:fadeIn 0.2s ease forwards}
 
+  /* Page-to-page transition — plays whenever the sidebar/nav swaps which
+     page is mounted (see the key={page} wrapper around PageErrorBoundary
+     in App). Kept as its own class/keyframes (separate from .fade-in, which
+     is used all over for small in-page reveals like dropdowns/tooltips) so
+     it can be tuned independently — page changes get a touch more motion
+     (slide + fade) since they're a bigger visual context switch. */
+  @keyframes pageTransitionIn{from{opacity:0;transform:translateY(14px) scale(0.995)}to{opacity:1;transform:none}}
+  .page-transition{height:100%;animation:pageTransitionIn 0.28s cubic-bezier(0.22,1,0.36,1)}
+  @media (prefers-reduced-motion: reduce){
+    .page-transition{animation:none}
+    .fade-in{animation:none}
+  }
+
   /* ── Responsive: mobile topbar + sidebar drawer ───────────────────────── */
   .mobile-topbar{display:none}
   .desktop-header{display:flex}
@@ -11086,7 +11099,9 @@ export default function App() {
               </div>
             </div>
             <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
-              <PageErrorBoundary key={page}>{pages[page]}</PageErrorBoundary>
+              <div key={page} className="page-transition" style={{ height: "100%" }}>
+                <PageErrorBoundary key={page}>{pages[page]}</PageErrorBoundary>
+              </div>
             </div>
           </div>
           {modalType === "welcome" && <WelcomeModal state={state} dispatch={dispatch} />}
