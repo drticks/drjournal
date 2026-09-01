@@ -670,7 +670,7 @@ async function createShareLink(trade) {
   const shareData = {
     id: trade.id, symbol: trade.symbol, direction: trade.direction, date: trade.date,
     entry: trade.entry, exit: trade.exit, size: trade.size, pnl: trade.pnl, pips: trade.pips,
-    outcome: trade.outcome, setup: trade.setup, session: trade.session, mood: trade.mood,
+    outcome: trade.outcome, setup: trade.setup, session: trade.session, mood: trade.mood, postEmotion: trade.postEmotion,
     notes: trade.notes, noteIdea: trade.noteIdea, noteEmotion: trade.noteEmotion, noteResult: trade.noteResult, screenshots: trade.screenshots,
   };
   const id = shortId();
@@ -3031,7 +3031,7 @@ function AddTradeModal({ state, dispatch }) {
     entryDate: new Date().toISOString().slice(0, 10), exitDate: "",
     symbol: "MGC", direction: "Long",
     entry: "", exit: "", size: "", pnl: "", pips: "", outcome: "",
-    setup: "", session: "", mood: "", moodSecondary: "",
+    setup: "", session: "", mood: "", moodSecondary: "", postEmotion: "",
     timeframe: "", trendBias: "", risk: "",
     openTime: "", closeTime: "", fees: "", exitBehavior: "", outcomeNeutral: "",
     notes: "", noteIdea: "", noteEmotion: "", noteResult: "", account: defaultAccount, screenshots: [], partialExits: [],
@@ -3345,6 +3345,17 @@ function AddTradeModal({ state, dispatch }) {
                   {!form.moodSecondary && <div>Tap another emotion to add an optional secondary.</div>}
                 </div>
               )}
+
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Post-Trade Emotion <span style={{ fontWeight: 400, color: C.textDim, fontSize: 11 }}>(How did you feel after it closed?)</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {POST_EMOTIONS.map(m => {
+                  const active = form.postEmotion === m;
+                  const col = postEmotionColor(m);
+                  return (
+                    <button key={m} type="button" onClick={() => set("postEmotion")(active ? "" : m)} style={segBtnStyle(active, col, textColorFor(col))}>{m}</button>
+                  );
+                })}
+              </div>
 
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Were you outcome neutral?</div>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>Did you remain emotionally detached from whether this trade won or lost?</div>
@@ -5429,6 +5440,13 @@ const EMOTION_META = {
   Anger: { description: "Reactive and impulsive trading state.", examples: ["Forced trades", "Escalating size after loss", "Emotional revenge behavior", "Frustration-based entries"] },
 };
 const emotionMeta = (m) => EMOTION_META[m] || { description: "Custom emotion — logged per-trade for your own reference.", examples: [] };
+
+// ─── Post-Trade Emotion — how the trader felt AFTER the trade closed, as ──
+// opposed to `mood` (the pre-trade / primary emotion above). Fixed list
+// (not user-customizable like `emotions`) since it's meant to stay simple
+// and comparable across trades.
+const POST_EMOTIONS = ["Happy", "Satisfied", "Neutral", "Dissatisfied", "Sad", "Frustrated"];
+const postEmotionColor = (m) => m === "Happy" || m === "Satisfied" ? C.accent : m === "Neutral" ? C.textMuted : m === "Dissatisfied" ? C.yellow : m === "Sad" || m === "Frustrated" ? C.red : hashColor(m);
 const exitBehaviorColor = (eb, outcome) => eb === "Planned" ? C.accent : eb === "Late" ? C.red : eb === "Early" ? C.yellow : C.textMuted;
 const postTradeStateColor = (s) => s === "Detached" ? C.accent : s === "Attached" ? C.red : s === "Neutral" ? C.yellow : C.textMuted;
 const POSITIVE_MOODS = ["Focus", "Focused", "Confident", "Patient"];
@@ -5504,6 +5522,7 @@ function Journal({ state, dispatch, setPage }) {
                   {th("Session")}
                   {th("Risk")}
                   {th("Pre-Emotion")}
+                  {th("Post-Emotion")}
                   {th("Exit Behavior")}
                   {th("P&L", "pnl")}
                   {th("Pips", "pips")}
@@ -5529,6 +5548,7 @@ function Journal({ state, dispatch, setPage }) {
                       {td(t.session ? <Badge color={hashColor(t.session)}>{t.session}</Badge> : "—")}
                       {td(t.risk ? <Badge color={riskColor(t.risk)}>{t.risk}</Badge> : "—")}
                       {td(t.mood ? <Badge color={moodColor(t.mood)}>{t.mood}</Badge> : "—")}
+                      {td(t.postEmotion ? <Badge color={postEmotionColor(t.postEmotion)}>{t.postEmotion}</Badge> : "—")}
                       {td(t.exitBehavior ? <Badge color={exitBehaviorColor(t.exitBehavior)}>{exitLabel}</Badge> : "—")}
                       {td(<span className="mono" style={{ fontWeight: 700, color: outcomeColor(t.outcome, t.pnl) }}>{fmtPnlMode(t)}</span>)}
                       {td(t.pips !== undefined && t.pips !== 0 ? <span className="mono" style={{ fontWeight: 700, color: t.pips > 0 ? C.accent : C.red }}>{t.pips > 0 ? "+" : ""}{t.pips}</span> : <span style={{ color: C.textDim }}>—</span>)}
@@ -6563,10 +6583,14 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
           {/* Behavior Insights */}
           <Card>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14, display: "flex", alignItems: "center", gap: 7 }}>🧠 Behavior Insights</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
               <div style={{ background: C.bg, borderRadius: 10, padding: 12 }}>
                 <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>PRE-TRADE EMOTION</div>
                 <Badge color={C.accent}>{trade.mood}</Badge>
+              </div>
+              <div style={{ background: C.bg, borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>POST-TRADE EMOTION</div>
+                <Badge color={trade.postEmotion ? postEmotionColor(trade.postEmotion) : C.textMuted}>{trade.postEmotion || "—"}</Badge>
               </div>
               <div style={{ background: C.bg, borderRadius: 10, padding: 12 }}>
                 <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>POST-TRADE STATE</div>
