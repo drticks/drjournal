@@ -3276,7 +3276,7 @@ function AddTradeModal({ state, dispatch }) {
           <ModalSelect label="Trading Session" badge="NEW!" value={form.session} onChange={set("session")} options={sessions} valueColor={C.blue} placeholder="Select Trading Session" />
           <ModalSelect label="Risk Meter" badge="NEW!" value={form.risk} onChange={set("risk")} options={riskLevels} valueColor={form.risk === "High Risk" ? C.red : form.risk === "Normal Risk" ? C.yellow : C.accent} placeholder="Select Risk Level" />
           <ModalSelect label="Trend Alignment" badge="NEW!" value={form.trendBias} onChange={set("trendBias")} options={trendBiases} valueColor={form.trendBias === "With Trend" ? C.accent : C.red} placeholder="Select Trend Alignment" />
-          <ModalSelect label="Target RR" badge="NEW!" value={form.targetRR} onChange={set("targetRR")} options={RR_TARGETS} valueColor={rrColor(form.targetRR)} placeholder="RR you were targeting (e.g. 1:2)" />
+          <RRTargetField value={form.targetRR} onChange={set("targetRR")} />
         </div>
 
         <ModalDivider />
@@ -6835,15 +6835,69 @@ const riskColor = (label) => label === "Low Risk" ? C.accent : label === "High R
 
 // ─── Target RR (planned risk:reward) ──────────────────────────────────────
 // The R-multiple the trader was aiming for when they took the trade (set on
-// entry, not derived from the outcome). Kept as a fixed preset list — like
-// `risk` — so trades group cleanly for analytics instead of fragmenting
-// across free-typed decimals like "2" vs "2.0" vs "1:2".
-const RR_TARGETS = ["1:1", "1:1.5", "1:2", "1:2.5", "1:3", "1:4", "1:5+"];
+// entry, not derived from the outcome) — expressed as a plain number (0.6,
+// 1, 2, 3…), not a "1:2" ratio. Kept as a fixed preset list — like `risk` —
+// so trades group cleanly for analytics instead of fragmenting across
+// free-typed decimals like "2" vs "2.0", with a "Custom…" escape hatch below
+// for anything off the list.
+const RR_TARGETS = ["0.5", "1", "1.5", "2", "2.5", "3", "4", "5"];
 const rrColor = (label) => {
   const i = RR_TARGETS.indexOf(label);
-  const palette = [C.textMuted, C.yellow, C.blue, "#2dd4bf", C.accent, "#9b6bff", "#ff8a3d"];
+  const palette = [C.textMuted, C.yellow, C.blue, "#2dd4bf", C.accent, "#9b6bff", "#ff8a3d", "#ff6b9d"];
   return palette[i] ?? hashColor(label);
 };
+const RR_CUSTOM_SENTINEL = "__custom_rr__";
+// Target RR field: presets by default (so trades still group cleanly for
+// analytics), but with a "Custom…" escape hatch for RR values that don't fit
+// the fixed list — the typed value is stored in the same `targetRR` field, so
+// everything downstream (badges, breakdowns, sorting) just treats it as an RR
+// label it doesn't recognize (rrColor already falls back to hashColor there).
+function RRTargetField({ value, onChange }) {
+  const isCustomValue = !!value && !RR_TARGETS.includes(value);
+  const [customMode, setCustomMode] = useState(isCustomValue);
+
+  if (customMode) {
+    return (
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Target RR</span>
+          <span style={{ background: C.accentDim, color: C.accent, fontSize: 9, fontWeight: 800, padding: "2px 7px", borderRadius: 20, letterSpacing: 0.4 }}>NEW!</span>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type="number"
+            step="0.1"
+            inputMode="decimal"
+            value={value || ""}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Type your RR (e.g. 0.6)"
+            autoFocus
+            style={{ ...modalInputStyle, flex: 1, minWidth: 0, fontWeight: 700, color: value ? rrColor(value) : C.textDim }}
+          />
+          <button
+            type="button"
+            onClick={() => { setCustomMode(false); onChange(""); }}
+            style={{ flexShrink: 0, background: "none", border: `1.5px solid ${C.border}`, borderRadius: 10, color: C.textMuted, padding: "0 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            Presets
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ModalSelect
+      label="Target RR"
+      badge="NEW!"
+      value={value}
+      onChange={v => (v === RR_CUSTOM_SENTINEL ? setCustomMode(true) : onChange(v))}
+      options={[...RR_TARGETS, { value: RR_CUSTOM_SENTINEL, label: "Custom…" }]}
+      valueColor={rrColor(value)}
+      placeholder="RR you were targeting (e.g. 2)"
+    />
+  );
+}
 
 function BreakdownSection({ icon, title, items, colorFn }) {
   const [expanded, setExpanded] = useState(false);
