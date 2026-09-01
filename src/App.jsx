@@ -3045,7 +3045,7 @@ function AddTradeModal({ state, dispatch }) {
     symbol: "MGC", direction: "Long",
     entry: "", exit: "", size: "", pnl: "", pips: "", outcome: "",
     setup: "", session: "", mood: "", moodSecondary: "", postEmotion: "",
-    timeframe: "", trendBias: "", risk: "",
+    timeframe: "", trendBias: "", risk: "", targetRR: "",
     openTime: "", closeTime: "", fees: "", exitBehavior: "", outcomeNeutral: "",
     notes: "", noteIdea: "", noteEmotion: "", noteResult: "", account: defaultAccount, screenshots: [], partialExits: [],
   });
@@ -3271,11 +3271,12 @@ function AddTradeModal({ state, dispatch }) {
           </div>
         </div>
 
-        {/* Trading Session / Risk Meter / Trend Alignment */}
+        {/* Trading Session / Risk Meter / Trend Alignment / Target RR */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 6 }}>
           <ModalSelect label="Trading Session" badge="NEW!" value={form.session} onChange={set("session")} options={sessions} valueColor={C.blue} placeholder="Select Trading Session" />
           <ModalSelect label="Risk Meter" badge="NEW!" value={form.risk} onChange={set("risk")} options={riskLevels} valueColor={form.risk === "High Risk" ? C.red : form.risk === "Normal Risk" ? C.yellow : C.accent} placeholder="Select Risk Level" />
           <ModalSelect label="Trend Alignment" badge="NEW!" value={form.trendBias} onChange={set("trendBias")} options={trendBiases} valueColor={form.trendBias === "With Trend" ? C.accent : C.red} placeholder="Select Trend Alignment" />
+          <ModalSelect label="Target RR" badge="NEW!" value={form.targetRR} onChange={set("targetRR")} options={RR_TARGETS} valueColor={rrColor(form.targetRR)} placeholder="RR you were targeting (e.g. 1:2)" />
         </div>
 
         <ModalDivider />
@@ -5536,6 +5537,7 @@ function Journal({ state, dispatch, setPage }) {
                   {th("Risk")}
                   {th("Pre-Emotion")}
                   {th("Post-Emotion")}
+                  {th("Target RR")}
                   {th("Exit Behavior")}
                   {th("P&L", "pnl")}
                   {th("Pips", "pips")}
@@ -5562,6 +5564,7 @@ function Journal({ state, dispatch, setPage }) {
                       {td(t.risk ? <Badge color={riskColor(t.risk)}>{t.risk}</Badge> : "—")}
                       {td(t.mood ? <Badge color={moodColor(t.mood)}>{t.mood}</Badge> : "—")}
                       {td(t.postEmotion ? <Badge color={postEmotionColor(t.postEmotion)}>{t.postEmotion}</Badge> : "—")}
+                      {td(t.targetRR ? <Badge color={rrColor(t.targetRR)}>{t.targetRR}</Badge> : "—")}
                       {td(t.exitBehavior ? <Badge color={exitBehaviorColor(t.exitBehavior)}>{exitLabel}</Badge> : "—")}
                       {td(<span className="mono" style={{ fontWeight: 700, color: outcomeColor(t.outcome, t.pnl) }}>{fmtPnlMode(t)}</span>)}
                       {td(t.pips !== undefined && t.pips !== 0 ? <span className="mono" style={{ fontWeight: 700, color: t.pips > 0 ? C.accent : C.red }}>{t.pips > 0 ? "+" : ""}{t.pips}</span> : <span style={{ color: C.textDim }}>—</span>)}
@@ -6830,6 +6833,18 @@ function groupBreakdown(trades, field) {
 
 const riskColor = (label) => label === "Low Risk" ? C.accent : label === "High Risk" ? C.red : C.yellow;
 
+// ─── Target RR (planned risk:reward) ──────────────────────────────────────
+// The R-multiple the trader was aiming for when they took the trade (set on
+// entry, not derived from the outcome). Kept as a fixed preset list — like
+// `risk` — so trades group cleanly for analytics instead of fragmenting
+// across free-typed decimals like "2" vs "2.0" vs "1:2".
+const RR_TARGETS = ["1:1", "1:1.5", "1:2", "1:2.5", "1:3", "1:4", "1:5+"];
+const rrColor = (label) => {
+  const i = RR_TARGETS.indexOf(label);
+  const palette = [C.textMuted, C.yellow, C.blue, "#2dd4bf", C.accent, "#9b6bff", "#ff8a3d"];
+  return palette[i] ?? hashColor(label);
+};
+
 function BreakdownSection({ icon, title, items, colorFn }) {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? items : items.slice(0, 3);
@@ -6860,7 +6875,9 @@ function BreakdownSection({ icon, title, items, colorFn }) {
 function groupedStatsBreakdown(trades, field) {
   const groups = {};
   trades.forEach(t => { const k = t[field]; if (!k) return; (groups[k] = groups[k] || []).push(t); });
-  return Object.entries(groups).map(([label, ts]) => ({ label, trades: ts, stats: calcStats(ts) })).sort((a, b) => b.trades.length - a.trades.length);
+  const rows = Object.entries(groups).map(([label, ts]) => ({ label, trades: ts, stats: calcStats(ts) }));
+  if (field === "targetRR") return rows.sort((a, b) => RR_TARGETS.indexOf(a.label) - RR_TARGETS.indexOf(b.label));
+  return rows.sort((a, b) => b.trades.length - a.trades.length);
 }
 
 function PlaybookStatBlock({ stats, count }) {
@@ -7008,7 +7025,7 @@ function EditPlaybookForm({ s, dispatch, onDone, onCancel }) {
   );
 }
 
-const PLAYBOOK_TABS = ["Performance", "Time Frames", "Sessions", "Risk", "Trend", "Rules", "Trades"];
+const PLAYBOOK_TABS = ["Performance", "Time Frames", "Sessions", "Risk", "Target RR", "Trend", "Rules", "Trades"];
 
 function PlaybookDetailModal({ s, trades, state, dispatch, onClose }) {
   const [tab, setTab] = useState("Performance");
@@ -7071,6 +7088,7 @@ function PlaybookDetailModal({ s, trades, state, dispatch, onClose }) {
             {tab === "Time Frames" && <PlaybookGroupedTab trades={st} field="timeframe" />}
             {tab === "Sessions" && <PlaybookGroupedTab trades={st} field="session" />}
             {tab === "Risk" && <PlaybookGroupedTab trades={st} field="risk" />}
+            {tab === "Target RR" && <PlaybookGroupedTab trades={st} field="targetRR" />}
 
             {tab === "Trend" && (
               trendBreakdown.length === 0 ? <div style={{ padding: "34px 0", textAlign: "center", color: C.textDim, fontSize: 13 }}>No trend alignment data logged yet.</div> : (
@@ -7147,6 +7165,7 @@ function StrategyCard({ s, trades, dispatch, onOpen }) {
   const tfItems = groupBreakdown(st, "timeframe");
   const sessionItems = groupBreakdown(st, "session");
   const riskItems = groupBreakdown(st, "risk");
+  const rrItems = groupBreakdown(st, "targetRR").sort((a, b) => RR_TARGETS.indexOf(a.label) - RR_TARGETS.indexOf(b.label));
   const color = s.color || C.accent;
   const [showShot, setShowShot] = useState(false);
   // Whole card opens the detail modal — except taps on an inner interactive
@@ -7202,6 +7221,7 @@ function StrategyCard({ s, trades, dispatch, onOpen }) {
       <BreakdownSection icon="🕐" title="Time Frame Entry" items={tfItems} />
       <BreakdownSection icon="🌐" title="Trading Session" items={sessionItems} />
       <BreakdownSection icon="⚠" title="Risk Meter" items={riskItems} colorFn={riskColor} />
+      <BreakdownSection icon="🎯" title="Target RR" items={rrItems} colorFn={rrColor} />
     </Card>
     {showShot && s.screenshot && <ImageLightbox images={[s.screenshot]} index={0} onClose={() => setShowShot(false)} onNavigate={() => {}} title={`${s.name} — Setup Screenshot`} />}
     </>
@@ -7682,10 +7702,14 @@ function BreakdownTable({ items }) {
 function buildFieldBreakdown(trades, field, colorFn) {
   const groups = {};
   trades.forEach(t => { const k = t[field]; if (!k) return; (groups[k] = groups[k] || []).push(t); });
-  return Object.entries(groups).map(([label, ts]) => {
+  const rows = Object.entries(groups).map(([label, ts]) => {
     const s = calcStats(ts);
     return { label, color: colorFn ? colorFn(label) : hashColor(label), winPct: Math.round(s.winRate), w: s.wins, l: s.losses, net: s.netPnl, pf: s.profitFactor };
-  }).sort((a, b) => b.net - a.net);
+  });
+  // Target RR reads better ordered 1:1 → 1:5+ (so you can see the trend as
+  // RR climbs) rather than sorted by net P&L like the other breakdowns.
+  if (field === "targetRR") return rows.sort((a, b) => RR_TARGETS.indexOf(a.label) - RR_TARGETS.indexOf(b.label));
+  return rows.sort((a, b) => b.net - a.net);
 }
 
 // ─── GROUPED BAR CHART (P&L by Setup × <dimension>) ────────────────────────
@@ -8116,6 +8140,7 @@ function Analytics({ state }) {
           </Card>
 
           <StatBreakdownSection icon="🕐" title="Time Frame Entry Statistics" trades={filtered} field="timeframe" strategies={state.strategies} colorFn={timeframeColor} />
+          <StatBreakdownSection icon="🎯" title="Target RR Statistics" trades={filtered} field="targetRR" strategies={state.strategies} colorFn={rrColor} />
           <StatBreakdownSection icon="🌐" title="Trading Session Statistics" trades={filtered} field="session" strategies={state.strategies} colorFn={sessionColorMap} />
           <StatBreakdownSection icon="⚠" title="Risk Meter Statistics" trades={filtered} field="risk" strategies={state.strategies} colorFn={riskColor} />
           <StatBreakdownSection icon="📈" title="Trend Alignment Statistics" trades={filtered} field="trendBias" strategies={state.strategies} colorFn={trendColor} />
