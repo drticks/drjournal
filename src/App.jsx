@@ -851,6 +851,13 @@ function defaultState() {
       { id: "pf4", name: "Prop Firm Capital", accountSize: 150000, status: "Live", evaluation: 119, fundedFee: 599, subscription: 24, platform: 12, other: 50, dateJoined: "2025-11-01" },
       { id: "pf5", name: "Trading Elite", accountSize: 25000, status: "Breached", evaluation: 89, fundedFee: 399, subscription: 9, platform: 9, other: 20, dateJoined: "2025-09-01" },
     ],
+    // Evaluation/funded-account rules the trader is tracking for a given
+    // trading account: { id, accountId, label, firmPreset, phases,
+    // currentPhase, profitTarget, drawdownType, maxDrawdown, consistencyPct,
+    // dailyLossLimit, minTradingDays }. Buffer/consistency/trading-day
+    // progress is derived live from that account's logged trades — see
+    // computePropRuleMetrics().
+    propRules: [],
     payouts: [
       { id: "fp1", firmId: "pf1", gross: 1350, splitPct: 80, date: "2025-10-27", certificateUrl: "", notes: "First funded payout!" },
       { id: "fp2", firmId: "pf1", gross: 2100, splitPct: 80, date: "2025-12-15", certificateUrl: "", notes: "Second month payout" },
@@ -921,6 +928,7 @@ function blankState() {
     accounts: [],
     trades: [],
     propFirms: [],
+    propRules: [],
     payouts: [],
     strategies: [],
     capitalTransactions: [],
@@ -1027,7 +1035,7 @@ function reducer(state, action) {
     case "COPY_TRADE": next = { ...state, trades: [{ ...action.trade, id: `t${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, account: action.accountId }, ...state.trades] }; break;
     case "ADD_ACCOUNT": next = { ...state, accounts: [...state.accounts, action.account] }; break;
     case "UPDATE_ACCOUNT": next = { ...state, accounts: state.accounts.map(a => a.id === action.id ? { ...a, ...action.data } : a) }; break;
-    case "DELETE_ACCOUNT": next = { ...state, accounts: state.accounts.filter(a => a.id !== action.id), trades: state.trades.filter(t => t.account !== action.id) }; break;
+    case "DELETE_ACCOUNT": next = { ...state, accounts: state.accounts.filter(a => a.id !== action.id), trades: state.trades.filter(t => t.account !== action.id), propRules: (state.propRules || []).filter(r => r.accountId !== action.id) }; break;
     case "ADD_STRATEGY": next = { ...state, strategies: [...state.strategies, action.strategy] }; break;
     case "DELETE_STRATEGY": next = { ...state, strategies: state.strategies.filter(s => s.id !== action.id) }; break;
     case "UPDATE_STRATEGY": {
@@ -1056,6 +1064,9 @@ function reducer(state, action) {
     case "ADD_PROP_FIRM": next = { ...state, propFirms: [...(state.propFirms || []), action.firm] }; break;
     case "UPDATE_PROP_FIRM": next = { ...state, propFirms: (state.propFirms || []).map(f => f.id === action.id ? { ...f, ...action.data } : f) }; break;
     case "DELETE_PROP_FIRM": next = { ...state, propFirms: (state.propFirms || []).filter(f => f.id !== action.id), payouts: state.payouts.filter(p => p.firmId !== action.id) }; break;
+    case "ADD_PROP_RULE": next = { ...state, propRules: [...(state.propRules || []), action.rule] }; break;
+    case "UPDATE_PROP_RULE": next = { ...state, propRules: (state.propRules || []).map(r => r.id === action.id ? { ...r, ...action.data } : r) }; break;
+    case "DELETE_PROP_RULE": next = { ...state, propRules: (state.propRules || []).filter(r => r.id !== action.id) }; break;
     case "OPEN_MODAL": next = { ...state, modal: action.modal }; break;
     case "CLOSE_MODAL": next = { ...state, modal: null }; break;
     case "IMPORT_DATA": next = { ...action.data, currentUser: state.currentUser, modal: null }; break;
@@ -9367,9 +9378,275 @@ function LostTab({ state }) {
   );
 }
 
+// ─── PROP EVALUATION RULES ──────────────────────────────────────────────────
+// Tracks a profit target / drawdown / consistency / daily-loss / min-trading-
+// days rule set against a specific trading account, with progress computed
+// live from that account's logged trades. Figures below are approximate,
+// commonly-published starting points for each firm's most popular account
+// size — always editable, and every field can also be entered manually via
+// "Custom (enter manually)".
+const PROP_FIRM_PRESETS = {
+  apex50k: { label: "Apex Trader Funding — 50K", phases: "1-step", profitTarget: 3000, drawdownType: "Trailing (EOD)", maxDrawdown: 2500, consistencyPct: "", dailyLossLimit: "", minTradingDays: 0 },
+  topstep50k: { label: "TopStep Trading Combine — 50K", phases: "1-step", profitTarget: 3000, drawdownType: "Trailing (EOD)", maxDrawdown: 2000, consistencyPct: 50, dailyLossLimit: "", minTradingDays: 5 },
+  ftmo100k: { label: "FTMO Challenge — $100K", phases: "2-step", profitTarget: 10000, drawdownType: "Static", maxDrawdown: 10000, consistencyPct: "", dailyLossLimit: 5000, minTradingDays: 4 },
+  topone50k: { label: "Top One Futures — 50K", phases: "1-step", profitTarget: 3000, drawdownType: "Trailing (EOD)", maxDrawdown: 2000, consistencyPct: 45, dailyLossLimit: "", minTradingDays: 0 },
+};
+const PROP_PHASES_OPTIONS = ["1-step", "2-step", "3-step"];
+const PROP_CURRENT_PHASE_OPTIONS = ["Phase 1", "Phase 2", "Phase 3", "Funded"];
+const PROP_DRAWDOWN_TYPES = ["Trailing (EOD)", "Trailing (Intraday)", "Static"];
+
+// Derives live progress for one rule from the trades logged against its
+// linked account. Note: we only have per-trade P&L (no tick-level equity),
+// so "Trailing (Intraday)" is approximated the same way as "Trailing (EOD)"
+// — a day-by-day high-water mark — rather than tracking open-position swings.
+function computePropRuleMetrics(rule, trades) {
+  const closed = (trades || [])
+    .filter(t => t.account === rule.accountId && t.pnl !== "" && t.pnl != null)
+    .slice()
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const dayMap = {};
+  closed.forEach(t => {
+    const day = (t.date || "").slice(0, 10);
+    if (!day) return;
+    dayMap[day] = (dayMap[day] || 0) + (parseFloat(t.pnl) || 0);
+  });
+  const days = Object.keys(dayMap).sort();
+  const tradingDays = days.length;
+  const netProfit = days.reduce((s, d) => s + dayMap[d], 0);
+  const bestDay = days.length ? Math.max(0, ...days.map(d => dayMap[d])) : 0;
+
+  const maxDD = parseFloat(rule.maxDrawdown) || 0;
+  let peak = 0, equity = 0, minBuffer = maxDD;
+  days.forEach(d => {
+    equity += dayMap[d];
+    if (rule.drawdownType === "Static") {
+      minBuffer = Math.min(minBuffer, maxDD - Math.max(0, -equity));
+    } else {
+      peak = Math.max(peak, equity);
+      minBuffer = Math.min(minBuffer, maxDD - (peak - equity));
+    }
+  });
+  const bufferRemaining = Math.max(0, Math.min(maxDD, minBuffer));
+  const breached = maxDD > 0 && minBuffer <= 0 && tradingDays > 0;
+
+  const profitTarget = parseFloat(rule.profitTarget) || 0;
+  const profitPct = profitTarget ? (netProfit / profitTarget) * 100 : 0;
+
+  const consistencyPct = rule.consistencyPct === "" || rule.consistencyPct == null ? null : parseFloat(rule.consistencyPct);
+  const consistencyCapDollar = consistencyPct != null ? (consistencyPct / 100) * profitTarget : null;
+  const consistencyOk = consistencyCapDollar == null || bestDay <= consistencyCapDollar;
+  const bestDayPctOfTarget = profitTarget ? (bestDay / profitTarget) * 100 : 0;
+
+  return { netProfit, profitPct, profitTarget, maxDD, bufferRemaining, breached, bestDay, consistencyPct, consistencyCapDollar, consistencyOk, bestDayPctOfTarget, tradingDays };
+}
+
+function PropRulesModal({ editing, state, dispatch, onClose }) {
+  const accounts = state.accounts || [];
+  const usedAccountIds = new Set((state.propRules || []).filter(r => r.id !== editing?.id).map(r => r.accountId));
+  const availableAccounts = accounts.filter(a => !usedAccountIds.has(a.id) || a.id === editing?.accountId);
+  const [form, setForm] = useState(editing || {
+    firmPreset: "custom", accountId: availableAccounts[0]?.id || "", label: "",
+    phases: "1-step", currentPhase: "Phase 1", profitTarget: "", drawdownType: "Trailing (EOD)",
+    maxDrawdown: "", consistencyPct: "", dailyLossLimit: "", minTradingDays: "",
+  });
+  const set = k => v => setForm(f => ({ ...f, [k]: v }));
+
+  const applyPreset = (key) => {
+    setForm(f => {
+      if (key === "custom") return { ...f, firmPreset: "custom" };
+      const p = PROP_FIRM_PRESETS[key];
+      return { ...f, firmPreset: key, phases: p.phases, profitTarget: p.profitTarget, drawdownType: p.drawdownType, maxDrawdown: p.maxDrawdown, consistencyPct: p.consistencyPct, dailyLossLimit: p.dailyLossLimit, minTradingDays: p.minTradingDays };
+    });
+  };
+
+  const canSave = form.accountId && form.label.trim() && form.profitTarget !== "" && form.maxDrawdown !== "";
+  const save = () => {
+    if (!canSave) return;
+    const rule = {
+      ...form, id: editing?.id || `pr${Date.now()}`,
+      label: form.label.trim(),
+      profitTarget: parseFloat(form.profitTarget) || 0,
+      maxDrawdown: parseFloat(form.maxDrawdown) || 0,
+      consistencyPct: form.consistencyPct === "" ? "" : parseFloat(form.consistencyPct) || 0,
+      dailyLossLimit: form.dailyLossLimit === "" ? "" : parseFloat(form.dailyLossLimit) || 0,
+      minTradingDays: parseFloat(form.minTradingDays) || 0,
+    };
+    dispatch({ type: editing ? "UPDATE_PROP_RULE" : "ADD_PROP_RULE", id: rule.id, data: rule, rule });
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="fade-in" style={{ background: C.modalBg, border: `1px solid ${C.borderLight}`, boxShadow: `0 0 0 1px ${C.accent}2a, 0 30px 80px #000d`, borderRadius: 18, padding: 28, width: "100%", maxWidth: 560, maxHeight: "92vh", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 22 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 800, flex: 1 }}>Prop Evaluation Rules</h2>
+          <button onClick={onClose} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, width: 32, height: 32, color: C.textMuted, fontSize: 20, cursor: "pointer", flexShrink: 0 }}>×</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <ModalSelect label="Firm Preset" value={form.firmPreset} onChange={applyPreset}
+            options={[{ value: "custom", label: "Custom (enter manually)" }, ...Object.entries(PROP_FIRM_PRESETS).map(([k, p]) => ({ value: k, label: p.label }))]} />
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {availableAccounts.length === 0 ? (
+              <ModalField label="Account"><div style={{ ...modalInputStyle, color: C.textDim }}>No accounts available</div></ModalField>
+            ) : (
+              <ModalSelect label="Account" value={form.accountId} onChange={set("accountId")} options={availableAccounts.map(a => ({ value: a.id, label: a.name }))} />
+            )}
+            <ModalField label="Label">
+              <input value={form.label} onChange={e => set("label")(e.target.value)} placeholder="e.g. FLEX 50K" style={modalInputStyle} />
+            </ModalField>
+
+            <ModalSelect label="Phases" value={form.phases} onChange={set("phases")} options={PROP_PHASES_OPTIONS} />
+            <ModalSelect label="Current Phase" value={form.currentPhase} onChange={set("currentPhase")} options={PROP_CURRENT_PHASE_OPTIONS} />
+
+            <ModalField label="Profit Target ($)">
+              <input type="number" value={form.profitTarget} onChange={e => set("profitTarget")(e.target.value)} placeholder="2500" style={modalInputStyle} />
+            </ModalField>
+            <ModalSelect label="Drawdown Type" value={form.drawdownType} onChange={set("drawdownType")} options={PROP_DRAWDOWN_TYPES} />
+
+            <ModalField label="Max Drawdown ($)">
+              <input type="number" value={form.maxDrawdown} onChange={e => set("maxDrawdown")(e.target.value)} placeholder="1500" style={modalInputStyle} />
+            </ModalField>
+            <ModalField label="Consistency (Best-Day %)">
+              <input type="number" value={form.consistencyPct} onChange={e => set("consistencyPct")(e.target.value)} placeholder="40" style={modalInputStyle} />
+            </ModalField>
+
+            <ModalField label="Daily Loss Limit ($)">
+              <input type="number" value={form.dailyLossLimit} onChange={e => set("dailyLossLimit")(e.target.value)} placeholder="optional" style={modalInputStyle} />
+            </ModalField>
+            <ModalField label="Min Trading Days">
+              <input type="number" value={form.minTradingDays} onChange={e => set("minTradingDays")(e.target.value)} placeholder="0" style={modalInputStyle} />
+            </ModalField>
+          </div>
+
+          <Btn onClick={save} disabled={!canSave} style={{ width: "100%", justifyContent: "center", marginTop: 4 }}>Save Rules</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PropRuleProgressBar(pct, color) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return (
+    <div style={{ height: 6, borderRadius: 3, background: C.border, overflow: "hidden", margin: "10px 0 8px" }}>
+      <div style={{ height: "100%", width: `${clamped}%`, background: color, borderRadius: 3, transition: "width 0.3s" }} />
+    </div>
+  );
+}
+
+function RuleCard({ rule, state, onEdit }) {
+  const m = computePropRuleMetrics(rule, state.trades || []);
+  const account = (state.accounts || []).find(a => a.id === rule.accountId);
+  const ddColor = m.breached ? C.red : m.bufferRemaining < m.maxDD * 0.3 ? C.yellow : C.accent;
+  const consColor = m.consistencyCapDollar == null ? C.textMuted : m.consistencyOk ? C.accent : C.red;
+  const daysColor = m.tradingDays >= (rule.minTradingDays || 0) ? C.accent : C.textMuted;
+
+  return (
+    <Card style={{ minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, flexWrap: "wrap", minWidth: 0 }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>🏆</span>
+        <span style={{ fontWeight: 800, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rule.label}</span>
+        <Badge color={C.purple || "#9b6bff"}>{rule.phases}</Badge>
+        <Badge color={C.purple || "#9b6bff"}>{rule.currentPhase}</Badge>
+        {account && <span style={{ fontSize: 11.5, color: C.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>({account.name})</span>}
+        <div style={{ flex: 1, minWidth: 4 }} />
+        <button onClick={onEdit} style={{ flexShrink: 0, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.textMuted, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>⚙ Rules</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Profit Target</div>
+            <Badge color={m.profitPct >= 100 ? C.accent : C.textMuted}>{m.profitPct >= 0 ? "+" : ""}{m.profitPct.toFixed(0)}%</Badge>
+          </div>
+          {PropRuleProgressBar(m.profitPct, m.profitPct >= 100 ? C.accent : C.blue)}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, minWidth: 0 }}>
+            <span className="mono" style={{ fontWeight: 700, color: m.netProfit >= 0 ? C.accent : C.red, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{moneyFmt(m.netProfit)}</span>
+            <span className="mono" style={{ color: C.textDim, whiteSpace: "nowrap", flexShrink: 0 }}>/ {moneyFmt(m.profitTarget)}</span>
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Drawdown buffer</div>
+              <div style={{ fontSize: 10.5, color: C.textDim }}>{rule.drawdownType}</div>
+            </div>
+            <Badge color={ddColor}>{m.breached ? "⚠ Breached" : `${moneyFmt(m.bufferRemaining)} safe`}</Badge>
+          </div>
+          {PropRuleProgressBar(m.maxDD ? (m.bufferRemaining / m.maxDD) * 100 : 0, ddColor)}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, minWidth: 0 }}>
+            <span className="mono" style={{ fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{moneyFmt(m.bufferRemaining)} room left</span>
+            <span className="mono" style={{ color: C.textDim, whiteSpace: "nowrap", flexShrink: 0 }}>max loss {moneyFmt(m.maxDD)}</span>
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Consistency</div>
+              <div style={{ fontSize: 10.5, color: C.textDim }}>{m.consistencyCapDollar == null ? "no cap set" : `max day ${rule.consistencyPct}% of target`}</div>
+            </div>
+            <Badge color={consColor}>{m.consistencyCapDollar == null ? "—" : m.consistencyOk ? "✓ OK" : "⚠ Exceeded"}</Badge>
+          </div>
+          {PropRuleProgressBar(m.consistencyCapDollar ? (m.bestDay / m.consistencyCapDollar) * 100 : 0, consColor)}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, minWidth: 0 }}>
+            <span className="mono" style={{ fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Best day {moneyFmt(m.bestDay)}</span>
+            <span className="mono" style={{ color: C.textDim, whiteSpace: "nowrap", flexShrink: 0 }}>{m.consistencyCapDollar == null ? "no cap" : `cap ${moneyFmt(m.consistencyCapDollar)}`}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.textMuted, minWidth: 0 }}>
+        <span>Daily loss limit: <b className="mono" style={{ color: C.text }}>{rule.dailyLossLimit === "" || rule.dailyLossLimit == null ? "Not set" : moneyFmt(rule.dailyLossLimit)}</b></span>
+        <span style={{ color: daysColor }}>{m.tradingDays} trading day{m.tradingDays !== 1 ? "s" : ""} (min {rule.minTradingDays || 0})</span>
+      </div>
+    </Card>
+  );
+}
+
+function RulesTab({ state, dispatch }) {
+  const rules = state.propRules || [];
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState(null);
+  const openNew = () => { setEditingRule(null); setModalOpen(true); };
+  const openEdit = (r) => { setEditingRule(r); setModalOpen(true); };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
+        <div style={{ fontSize: 13, color: C.textMuted, maxWidth: 640, lineHeight: 1.5 }}>
+          Set a profit target, drawdown, and consistency rule for an evaluation or funded account. Log trades to that account and this tab tracks your remaining buffer automatically.
+        </div>
+        {(state.accounts || []).length > 0 && <Btn small onClick={openNew}>+ Track Account</Btn>}
+      </div>
+
+      {rules.length === 0 ? (
+        <Card style={{ textAlign: "center", padding: "60px 20px" }}>
+          <div style={{ fontSize: 34, marginBottom: 14, color: C.textDim }}>🛡</div>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>No accounts under evaluation tracking yet</div>
+          <div style={{ color: C.textMuted, fontSize: 13, marginBottom: 20 }}>Pick an account and set its profit target, drawdown, and consistency rules.</div>
+          {(state.accounts || []).length > 0
+            ? <Btn onClick={openNew}>+ Track Account</Btn>
+            : <div style={{ fontSize: 12.5, color: C.textDim }}>Add a trading account first (Settings → Accounts) to start tracking a rule set.</div>}
+        </Card>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {rules.map(r => <RuleCard key={r.id} rule={r} state={state} onEdit={() => openEdit(r)} />)}
+        </div>
+      )}
+
+      {modalOpen && <PropRulesModal editing={editingRule} state={state} dispatch={dispatch} onClose={() => setModalOpen(false)} />}
+    </div>
+  );
+}
+
 function Finances({ state, dispatch }) {
   const [tab, setTab] = useState("pnl");
-  const TABS = [["pnl", "⚖ P&L"], ["expenses", "$ Expenses"], ["payouts", "⊙ Payouts"], ["lost", "⊘ Lost"]];
+  const TABS = [["pnl", "⚖ P&L"], ["expenses", "$ Expenses"], ["payouts", "⊙ Payouts"], ["lost", "⊘ Lost"], ["rules", "🛡 Rules"]];
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
       <PageHeader title="Prop Firms" subtitle="Track expenses, payouts, and profit from your prop firms." />
@@ -9383,6 +9660,7 @@ function Finances({ state, dispatch }) {
       {tab === "expenses" && <ExpensesTab state={state} dispatch={dispatch} />}
       {tab === "payouts" && <PayoutsTab state={state} dispatch={dispatch} />}
       {tab === "lost" && <LostTab state={state} />}
+      {tab === "rules" && <RulesTab state={state} dispatch={dispatch} />}
     </div>
   );
 }
