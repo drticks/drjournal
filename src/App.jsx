@@ -210,9 +210,16 @@ function buildGlobalCSS() {
   }
 
   /* ── Global overflow safety net ───────────────────────────────────────
-     Nothing on the page should ever be able to force a horizontal scrollbar
-     on the document itself — individual panels (tables, calendars, tab
-     bars) opt into their own overflow-x:auto instead. */
+     By default, a flex or grid ITEM's minimum width is "auto" — i.e. it
+     refuses to shrink below the width of its own content (a long $ value,
+     an unbroken string, a wide label). That's the #1 cause of "cards
+     overflow on mobile": one long number inside a card forces the whole
+     grid track — and often the whole page — wider than the viewport. This
+     rule resets every direct child of any inline flex/grid container back
+     to min-width:0 so it can actually shrink to fit; elements that must
+     stay full-size already set flexShrink:0 / an explicit width, which
+     this does not affect. */
+  [style*="display: flex"] > *, [style*="display: grid"] > *{min-width:0}
   html{overflow-x:hidden;max-width:100vw}
   img,svg{max-width:100%}
 
@@ -228,15 +235,15 @@ function buildGlobalCSS() {
      essential groups first (contact links, then the nav-label+clock group)
      and shrinks the account/user name labels before anything gets clipped. */
   @media (max-width: 1300px){
-    .hdr-contacts{display:none}
+    .hdr-contacts{display:none !important}
   }
   @media (max-width: 1040px){
-    .hdr-left{display:none}
+    .hdr-left{display:none !important}
   }
   @media (max-width: 860px){
-    .hdr-sync{display:none}
+    .hdr-sync{display:none !important}
     .hdr-acct-label{max-width:70px !important}
-    .hdr-user-label{display:none}
+    .hdr-user-label{display:none !important}
   }
   @media (max-width: 761px){
     .desktop-header{padding:10px 12px !important;gap:6px !important}
@@ -1111,7 +1118,7 @@ const Sel = ({ label, value, onChange, options, style = {} }) => (
 );
 
 const Card = ({ children, style = {}, onClick }) => (
-  <div onClick={onClick} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 22, transition: "border-color 0.15s, box-shadow 0.15s", cursor: onClick ? "pointer" : "default", ...style }}
+  <div onClick={onClick} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 22, transition: "border-color 0.15s, box-shadow 0.15s", cursor: onClick ? "pointer" : "default", minWidth: 0, maxWidth: "100%", boxSizing: "border-box", ...style }}
     onMouseEnter={onClick ? e => { e.currentTarget.style.borderColor = C.accent + "66"; e.currentTarget.style.boxShadow = `0 0 0 1px ${C.accent}22`; } : null}
     onMouseLeave={onClick ? e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; } : null}>
     {children}
@@ -1119,7 +1126,7 @@ const Card = ({ children, style = {}, onClick }) => (
 );
 
 const Badge = ({ children, color = C.accent }) => (
-  <span style={{ background: color + "22", color, border: `1px solid ${color}44`, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{children}</span>
+  <span style={{ background: color + "22", color, border: `1px solid ${color}44`, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "middle", boxSizing: "border-box" }}>{children}</span>
 );
 
 // Full-screen loading state — three bouncing spades (the app's own suit
@@ -1144,15 +1151,15 @@ const StatCard = ({ label, value, sub, color, style, icon, iconColor, tone = "ne
     <div style={{
       background: toneColor ? toneColor + "0c" : C.surface,
       border: `1px solid ${toneColor ? toneColor + "40" : C.border}`,
-      borderRadius: 20, padding: "18px 20px", transition: "border-color 0.15s",
+      borderRadius: 20, padding: "18px 20px", transition: "border-color 0.15s", minWidth: 0,
       ...style,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, minWidth: 0 }}>
         {icon && <span style={{ fontSize: 14, color: iconColor || toneColor || C.textMuted, display: "flex", alignItems: "center", flexShrink: 0 }}>{icon}</span>}
-        <span style={{ fontSize: 13.5, color: C.textMuted, fontWeight: 500, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+        <span style={{ fontSize: 13.5, color: C.textMuted, fontWeight: 500, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
       </div>
-      <div className="mono" style={{ fontSize: 26, fontWeight: 800, color: color || C.text, letterSpacing: -0.5 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6 }}>{sub}</div>}
+      <div className="mono" style={{ fontSize: 26, fontWeight: 800, color: color || C.text, letterSpacing: -0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>}
     </div>
   );
 };
@@ -1186,14 +1193,14 @@ function GlowStatCard({ icon, title, value, valueColor, subtitle, glow }) {
   return (
     <div style={{
       background: C.surface, border: `1px solid ${glow}55`, borderRadius: 20, padding: 22,
-      boxShadow: `0 0 0 1px ${glow}18, 0 10px 34px ${glow}12`,
+      boxShadow: `0 0 0 1px ${glow}18, 0 10px 34px ${glow}12`, minWidth: 0,
     }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1.2, lineHeight: 1.4 }}>{title}</div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10, minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1.2, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
         <div style={{ width: 28, height: 28, borderRadius: 8, background: glow + "1c", border: `1px solid ${glow}40`, color: glow, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{GLOW_ICONS[icon]}</div>
       </div>
-      <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: valueColor || glow, letterSpacing: -1 }}>{value}</div>
-      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 5, lineHeight: 1.5 }}>{subtitle}</div>
+      <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: valueColor || glow, letterSpacing: -1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 5, lineHeight: 1.5, overflowWrap: "break-word" }}>{subtitle}</div>
     </div>
   );
 }
