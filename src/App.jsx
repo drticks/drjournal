@@ -209,11 +209,38 @@ function buildGlobalCSS() {
     .fade-in{animation:none}
   }
 
+  /* ── Global overflow safety net ───────────────────────────────────────
+     Nothing on the page should ever be able to force a horizontal scrollbar
+     on the document itself — individual panels (tables, calendars, tab
+     bars) opt into their own overflow-x:auto instead. */
+  html{overflow-x:hidden;max-width:100vw}
+  img,svg{max-width:100%}
+
   /* ── Responsive: mobile topbar + sidebar drawer ───────────────────────── */
   .mobile-topbar{display:none}
   .desktop-header{display:flex}
   .sidebar-scrim{display:none}
   .calendar-scroll{overflow-x:visible}
+
+  /* ── Responsive: desktop header ────────────────────────────────────────
+     Between the mobile-topbar breakpoint (760px) and full desktop width the
+     header has too many items to fit on one line, so it sheds the least
+     essential groups first (contact links, then the nav-label+clock group)
+     and shrinks the account/user name labels before anything gets clipped. */
+  @media (max-width: 1300px){
+    .hdr-contacts{display:none}
+  }
+  @media (max-width: 1040px){
+    .hdr-left{display:none}
+  }
+  @media (max-width: 860px){
+    .hdr-sync{display:none}
+    .hdr-acct-label{max-width:70px !important}
+    .hdr-user-label{display:none}
+  }
+  @media (max-width: 761px){
+    .desktop-header{padding:10px 12px !important;gap:6px !important}
+  }
 
   @media (max-width: 880px){
     [style*="grid-template-columns: repeat(4, 1fr)"]{grid-template-columns:repeat(2,1fr) !important}
@@ -2465,21 +2492,26 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
   };
 
   const currentNavLabel = (NAV.find(n => n.id === page)?.label) || (page === "import" ? "Import Trades" : page === "settings" ? "Settings" : "");
-  const HeaderDivider = () => <div style={{ width: 1, alignSelf: "stretch", background: C.border, margin: "0 2px", flexShrink: 0 }} />;
+  const HeaderDivider = ({ className }) => <div className={className} style={{ width: 1, alignSelf: "stretch", background: C.border, margin: "0 2px", flexShrink: 0 }} />;
 
   return (
     <div className="desktop-header" style={{
       display: "flex", alignItems: "center", gap: 10, padding: "12px 20px",
       borderBottom: `1px solid ${C.border}`, background: C.sidebar, flexShrink: 0, position: "relative", zIndex: 30,
-      boxShadow: `0 1px 0 ${C.accent}22`,
+      boxShadow: `0 1px 0 ${C.accent}22`, minWidth: 0,
     }}>
-      {currentNavLabel && (
-        <div style={{ fontSize: 14, fontWeight: 800, color: C.text, whiteSpace: "nowrap", paddingRight: 4 }}>{currentNavLabel}</div>
-      )}
-      <HeaderDivider />
-      <LiveSessionClock />
+      {/* Nav label + live session clock — least essential on tablet/laptop
+          widths (the page body usually repeats the section name), so this
+          whole group collapses first as space tightens. */}
+      <div className="hdr-left" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        {currentNavLabel && (
+          <div style={{ fontSize: 14, fontWeight: 800, color: C.text, whiteSpace: "nowrap", paddingRight: 4 }}>{currentNavLabel}</div>
+        )}
+        <HeaderDivider />
+        <LiveSessionClock />
+      </div>
 
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, minWidth: 8 }} />
 
       <Btn small variant="tealOutline" onClick={() => openAddTrade(state, dispatch)}>+ Add Trade</Btn>
 
@@ -2487,7 +2519,7 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
       <div style={{ position: "relative" }}>
         <button onClick={() => setAccountOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, fontWeight: 600, padding: "8px 14px", cursor: "pointer", whiteSpace: "nowrap" }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: activeAccountColor, flexShrink: 0 }} />
-          <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeAccountLabel}</span>
+          <span className="hdr-acct-label" style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeAccountLabel}</span>
           <span style={{ fontSize: 9, color: C.textDim }}>▾</span>
         </button>
         {accountOpen && (
@@ -2537,15 +2569,18 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
 
       <ThemeModeToggle state={state} dispatch={dispatch} />
 
-      <SyncBadge status={syncStatus} />
+      <div className="hdr-sync">
+        <SyncBadge status={syncStatus} />
+      </div>
 
       <HeaderDivider />
 
       <button title="Settings" onClick={() => setPage("settings")} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.textMuted, width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="settings" size={15} /></button>
 
-      <ContactCTA kind="mail" style={{ background: "transparent", border: "none", color: C.textMuted, padding: "8px 6px", fontWeight: 600 }} />
-
-      <ContactCTA kind="instagram" style={{ background: "transparent", border: "none", color: C.accent, padding: "8px 6px" }} />
+      <div className="hdr-contacts" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <ContactCTA kind="mail" style={{ background: "transparent", border: "none", color: C.textMuted, padding: "8px 6px", fontWeight: 600 }} />
+        <ContactCTA kind="instagram" style={{ background: "transparent", border: "none", color: C.accent, padding: "8px 6px" }} />
+      </div>
 
       <HeaderDivider />
 
@@ -2553,7 +2588,7 @@ function TopHeader({ state, dispatch, setPage, page, syncStatus }) {
       <div style={{ position: "relative" }}>
         <button onClick={() => setUserOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, fontWeight: 600, padding: "6px 12px 6px 8px", cursor: "pointer" }}>
           <UserAvatar state={state} size={24} fontSize={12} />
-          <span style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser?.name || "Account"}</span>
+          <span className="hdr-user-label" style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser?.name || "Account"}</span>
           <span style={{ fontSize: 9, color: C.textDim }}>▾</span>
         </button>
         {userOpen && (
