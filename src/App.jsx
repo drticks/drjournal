@@ -1051,13 +1051,6 @@ function reducer(state, action) {
     // signup gets (see blankState()) — but keeps the person logged in on
     // their same user record rather than sending them back to auth.
     case "CLEAR_ALL_DATA": next = { ...blankState(), currentUser: state.currentUser, modal: null }; break;
-    // Permanently deletes the account from this app's own local/cloud
-    // storage: wipes every trade/account/note/etc (like CLEAR_ALL_DATA) AND
-    // removes the person from `users` and logs them out, landing them back
-    // on the sign-up screen — vs. CLEAR_ALL_DATA, which wipes data but
-    // keeps them signed in. See deleteMyAccount() in Settings for the
-    // caveat about the underlying auth credential itself.
-    case "DELETE_MY_ACCOUNT": next = { ...blankState(), users: (state.users || []).filter(u => u.id !== state.currentUser?.id), currentUser: null, modal: null }; break;
     case "REGISTER": next = { ...blankState(), users: [...state.users, action.user], currentUser: action.user, modal: "welcome" }; break;
     // Loads a fully seeded demo environment (sample trades, accounts, prop
     // firms, playbook, live capital) for a logged-out visitor exploring from
@@ -10356,8 +10349,6 @@ function Settings({ state, dispatch }) {
   const [editAccName, setEditAccName] = useState(""), [editAccType, setEditAccType] = useState("Funded"), [editAccColor, setEditAccColor] = useState(ACCOUNT_COLORS[0]);
   const [newSession, setNewSession] = useState(""), [newEmotion, setNewEmotion] = useState("");
   const [clearAllConfirm, setClearAllConfirm] = useState(false);
-  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState(false);
-  const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [toast, setToast] = useState("");
   const [displayNameInput, setDisplayNameInput] = useState(state.currentUser?.name || "");
@@ -10426,32 +10417,6 @@ function Settings({ state, dispatch }) {
     setNewPassword(""); setConfirmPassword("");
     notify("✓ Password updated.");
   };
-
-  // Permanently deletes this person's account: wipes their public profile
-  // row (if any) and all local/cloud journal data, then signs them out so
-  // they land back on the auth screen instead of just going blank while
-  // still "logged in" (that's what Clear All Data is for, further down).
-  // NOTE: this does not delete the underlying Supabase Auth credential
-  // itself (email + password) — that requires a privileged admin call
-  // (supabase.auth.admin.deleteUser), which can only run on a server with
-  // the service-role key, never in client-side code. Wire up a Supabase
-  // Edge Function (or similar backend endpoint) that this calls if the
-  // email address itself needs to become reusable for a brand-new signup;
-  // as-is, this clears everything the person can see and use.
-  const deleteMyAccount = async () => {
-    setDeletingAccount(true);
-    try {
-      if (state.profilePublic && state.userHandle) {
-        try { await deletePublicProfile(state.userHandle); } catch (e) { /* best-effort */ }
-      }
-      await supabase.auth.signOut();
-    } finally {
-      dispatch({ type: "DELETE_MY_ACCOUNT" });
-      setDeletingAccount(false);
-      setDeleteAccountConfirm(false);
-    }
-  };
-
 
   const theme = state.theme || { name: "Neon", mode: "night" };
   const setThemeMode = (mode) => dispatch({ type: "SET_THEME", theme: { mode } });
@@ -11079,28 +11044,6 @@ function Settings({ state, dispatch }) {
         ) : (
           <Btn variant="danger" onClick={() => setClearAllConfirm(true)}>🗑 Clear All Data</Btn>
         )}
-
-        <div style={{ height: 1, background: C.border, margin: "16px 0" }} />
-
-        {deleteAccountConfirm ? (
-          <div className="fade-in" style={{ background: C.redDim, border: `1px solid ${C.red}55`, borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <span style={{ fontSize: 16, color: C.red, flexShrink: 0 }}>⚠</span>
-              <div style={{ flex: 1, fontSize: 13, color: C.text, lineHeight: 1.5 }}>
-                Permanently delete your <b>account</b> — every trade, account, strategy, prop firm, payout, and note, plus your sign-in itself? This cannot be undone. You'll be signed out immediately and will need to sign up again from scratch to use the app.
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <Btn small variant="danger" onClick={deleteMyAccount} disabled={deletingAccount} style={{ flex: 1, justifyContent: "center" }}>{deletingAccount ? "Deleting…" : "Yes, Delete My Account"}</Btn>
-              <Btn small variant="ghost" onClick={() => setDeleteAccountConfirm(false)} disabled={deletingAccount} style={{ flex: 1, justifyContent: "center" }}>Cancel</Btn>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <Btn variant="danger" onClick={() => setDeleteAccountConfirm(true)}>⛔ Delete My Account</Btn>
-            <div style={{ fontSize: 11.5, color: C.textDim, marginTop: 8, lineHeight: 1.5 }}>Wipes all your data and signs you out for good — you'd need to sign up again to come back.</div>
-          </div>
-        )}
       </Card>
 
 
@@ -11253,7 +11196,7 @@ export default function App() {
   // handle changes or Public Profile gets turned off.
   const prevPublicHandleRef = useRef(null);
   const dispatch = useCallback(action => {
-    if (action.type === "CLEAR_ALL_DATA" || action.type === "DELETE_MY_ACCOUNT") allowEmptySaveRef.current = true;
+    if (action.type === "CLEAR_ALL_DATA") allowEmptySaveRef.current = true;
     setRawState(prev => reducer(prev, action));
   }, []);
 
