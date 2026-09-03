@@ -286,6 +286,37 @@ function buildGlobalCSS() {
     .calendar-scroll [style*="grid-template-columns: repeat(7, 1fr)"]{grid-template-columns:repeat(7,1fr) !important}
   }
 
+  /* ── Responsive: stat-card rows ───────────────────────────────────────
+     The generic grid-collapse rules above force every card onto its own
+     full-width row, which stretches a small stat card (one label + one
+     number) into a wide, mostly-empty rectangle — not overflowing, just
+     ugly. Rows made only of small stat cards (StatCard/GlowStatCard and
+     equivalent mini boxes) get their own rule instead: two even columns
+     down to a small phone, one only below that, so each card keeps a
+     sensible, roughly-square proportion instead of being stretched thin. */
+  @media (max-width: 700px){
+    .stat-grid{grid-template-columns:repeat(2,1fr) !important}
+  }
+  @media (max-width: 420px){
+    .stat-grid{grid-template-columns:1fr !important}
+  }
+
+  /* ── Responsive: hero stat rows ───────────────────────────────────────
+     A featured wide card (big number, badges) sharing a row with 2-3 plain
+     stat cards — e.g. "Net P&L" next to "Win Rate"/"Day Win %". Collapsing
+     this to one column (like the generic rule does) stretches the small
+     stat cards just as badly as above. Instead: the featured card keeps a
+     full-width row to itself, and the remaining stat cards drop into their
+     own even 2-up grid underneath it. */
+  @media (max-width: 880px){
+    .hero-stat-grid{grid-template-columns:1fr 1fr !important}
+    .hero-stat-grid > *:first-child{grid-column:1 / -1}
+  }
+  @media (max-width: 420px){
+    .hero-stat-grid{grid-template-columns:1fr !important}
+    .hero-stat-grid > *:first-child{grid-column:auto}
+  }
+
   /* ── Privacy Mode: block printing (Print → Save as PDF is a common
      screenshot workaround). Only applied when the .privacy-print-lock
      class is present, i.e. the user has Privacy Mode + Block Printing on. ── */
@@ -1020,6 +1051,13 @@ function reducer(state, action) {
     // signup gets (see blankState()) — but keeps the person logged in on
     // their same user record rather than sending them back to auth.
     case "CLEAR_ALL_DATA": next = { ...blankState(), currentUser: state.currentUser, modal: null }; break;
+    // Permanently deletes the account from this app's own local/cloud
+    // storage: wipes every trade/account/note/etc (like CLEAR_ALL_DATA) AND
+    // removes the person from `users` and logs them out, landing them back
+    // on the sign-up screen — vs. CLEAR_ALL_DATA, which wipes data but
+    // keeps them signed in. See deleteMyAccount() in Settings for the
+    // caveat about the underlying auth credential itself.
+    case "DELETE_MY_ACCOUNT": next = { ...blankState(), users: (state.users || []).filter(u => u.id !== state.currentUser?.id), currentUser: null, modal: null }; break;
     case "REGISTER": next = { ...blankState(), users: [...state.users, action.user], currentUser: action.user, modal: "welcome" }; break;
     // Loads a fully seeded demo environment (sample trades, accounts, prop
     // firms, playbook, live capital) for a logged-out visitor exploring from
@@ -4800,7 +4838,7 @@ function PublicMonthView({ id }) {
           <div style={{ flex: 1 }} />
           <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: netPnl >= 0 ? C.accent : C.red }}>{fmt$(netPnl)}</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
+        <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
           {[["Trades", tradeCount], ["Green Days", greenDays], ["Red Days", redDays], ["Day Win Rate", `${dayWinPct}%`]].map(([k, v]) => (
             <div key={k} style={{ background: C.surfaceHigh, borderRadius: 10, padding: "10px 12px" }}>
               <div style={{ fontSize: 10, color: C.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{k}</div>
@@ -4881,7 +4919,7 @@ function PublicProfileView({ handle, onClose }) {
           <div style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>@{handle}</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 20 }}>
+        <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 20 }}>
           <StatCard label="Net P&L" value={fmt$(netPnl)} color={netPnl >= 0 ? C.accent : C.red} />
           <StatCard label="Win Rate" value={`${winRate.toFixed(1)}%`} />
           <StatCard label="Profit Factor" value={profitFactor >= 99 ? "∞" : profitFactor.toFixed(2)} />
@@ -5426,7 +5464,7 @@ function Dashboard({ state, dispatch, setPage }) {
       {/* Behavioral insights */}
       <div>
         <SectionLabel>Behavioral Insights</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+        <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
           <GlowStatCard icon="badge" glow={edgeZoneInfo.color} title="Behavioral Edge™" value={`${avgEdge.toFixed(2)} / 10`} subtitle={edgeZoneInfo.label} />
           <GlowStatCard icon="pulse" glow={stabilityTier.color} title="Emotional Stability" value={`${stabilityScore}%`} subtitle={`${stabilityTier.label} · Shift Rate: ${moodShiftRate.toFixed(0)}%`} />
           <GlowStatCard icon="target" glow={plannedExitPct >= 60 ? C.accent : C.yellow} title="Exit Discipline" value={`${plannedExitPct.toFixed(0)}%`} subtitle={`Late-Loss Rate: ${lateLossPct.toFixed(0)}%`} />
@@ -6990,7 +7028,7 @@ function groupedStatsBreakdown(trades, field) {
 function PlaybookStatBlock({ stats, count }) {
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
+      <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
         <StatCard label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} color={stats.winRate >= 50 ? C.accent : C.text} />
         <StatCard label="Net P&L" value={fmt$(stats.netPnl)} color={stats.netPnl >= 0 ? C.accent : C.red} />
         <StatCard label="Profit Factor" value={stats.profitFactor >= 99 ? "∞" : stats.profitFactor.toFixed(2)} />
@@ -8179,7 +8217,7 @@ function Analytics({ state }) {
       } />
 
       {/* Hero row — featured Net P&L + Win Rate cards, matching the Dashboard's language */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 16, marginBottom: 18 }}>
+      <div className="hero-stat-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 16, marginBottom: 18 }}>
         <Card style={{ background: `linear-gradient(135deg, ${(stats.netPnl >= 0 ? C.accent : C.red)}12, transparent 65%)`, border: `1px solid ${(stats.netPnl >= 0 ? C.accent : C.red)}40` }}>
           <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5 }}>Net P&amp;L · {filtered.length} trades</div>
           <div className="mono" style={{ fontSize: 42, fontWeight: 800, color: stats.netPnl >= 0 ? C.accent : C.red, letterSpacing: -1.5, margin: "8px 0" }}>{fmt$(stats.netPnl)}</div>
@@ -8586,7 +8624,7 @@ function EmotionsScore({ state, dispatch, setPage }) {
       )}
 
       {/* Hero — featured edge score card + 3 supporting stats, asymmetric split */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
+      <div className="hero-stat-grid" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
         <Card style={{ background: `linear-gradient(135deg, ${zone.color}12, transparent 65%)`, border: `1px solid ${zone.color}40` }}>
           <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10 }}>Period Avg Edge Score</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
@@ -8713,7 +8751,7 @@ function EmotionsScore({ state, dispatch, setPage }) {
           {/* Exit Behavior Analysis */}
           <Card>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Exit Behavior Analysis</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+            <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
               <div style={{ background: C.bg, borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 10, color: C.textDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Planned Exit Rate</div>
                 <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: C.accent }}>{plannedRate.toFixed(0)}%</div>
@@ -9111,7 +9149,7 @@ function PnLTab({ state, dispatch }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+      <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         <StatCard label="Total Revenue" value={fmt$(totalRevenue)} color={C.accent} />
         <StatCard label="Total Expenses" value={`-$${totalExpenses.toFixed(2)}`} color={C.red} />
         <StatCard label="Net Profit" value={fmt$(netProfit)} color={netProfit >= 0 ? C.accent : C.red} />
@@ -9265,7 +9303,7 @@ function PayoutsTab({ state, dispatch }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, flex: 1, minWidth: 320 }}>
+        <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, flex: 1, minWidth: 320 }}>
           <StatCard label="Total Gross Payouts" value={`$${totalGross.toFixed(2)}`} />
           <StatCard label="Total Net (You Received)" value={fmt$(totalNet)} color={C.accent} />
         </div>
@@ -9326,7 +9364,7 @@ function LostTab({ state }) {
           </div>
         </div>
       </Card>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+      <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
         <StatCard label="Lost Accounts" value={lost.length} color={C.red} />
         <StatCard label="Total Capital Lost" value={`-$${totalLost.toFixed(2)}`} color={C.red} />
         <StatCard label="Avg Cost per Breach" value={`$${avgCost.toFixed(2)}`} color={C.yellow} />
@@ -9774,7 +9812,7 @@ function LiveCapitalOverview({ state, dispatch, setPage }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
+      <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
         <StatCard label="Current Live Capital" value={moneyFmt(s.currentLiveCapital)} color={C.accent} style={{ minWidth: 0 }} />
         <StatCard label="Net Account Change" value={fmt$(s.netAccountChange)} color={s.netAccountChange >= 0 ? C.accent : C.red} sub={`${s.netAccountChangePct.toFixed(1)}%`} style={{ minWidth: 0 }} />
         <StatCard label="Realized Trading Profit" value={fmt$(s.realizedTradingProfit)} color={s.realizedTradingProfit >= 0 ? C.accent : C.red} sub={`${s.realizedPct.toFixed(1)}% · Pure trading performance`} style={{ minWidth: 0 }} />
@@ -10318,6 +10356,8 @@ function Settings({ state, dispatch }) {
   const [editAccName, setEditAccName] = useState(""), [editAccType, setEditAccType] = useState("Funded"), [editAccColor, setEditAccColor] = useState(ACCOUNT_COLORS[0]);
   const [newSession, setNewSession] = useState(""), [newEmotion, setNewEmotion] = useState("");
   const [clearAllConfirm, setClearAllConfirm] = useState(false);
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [toast, setToast] = useState("");
   const [displayNameInput, setDisplayNameInput] = useState(state.currentUser?.name || "");
@@ -10386,6 +10426,32 @@ function Settings({ state, dispatch }) {
     setNewPassword(""); setConfirmPassword("");
     notify("✓ Password updated.");
   };
+
+  // Permanently deletes this person's account: wipes their public profile
+  // row (if any) and all local/cloud journal data, then signs them out so
+  // they land back on the auth screen instead of just going blank while
+  // still "logged in" (that's what Clear All Data is for, further down).
+  // NOTE: this does not delete the underlying Supabase Auth credential
+  // itself (email + password) — that requires a privileged admin call
+  // (supabase.auth.admin.deleteUser), which can only run on a server with
+  // the service-role key, never in client-side code. Wire up a Supabase
+  // Edge Function (or similar backend endpoint) that this calls if the
+  // email address itself needs to become reusable for a brand-new signup;
+  // as-is, this clears everything the person can see and use.
+  const deleteMyAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      if (state.profilePublic && state.userHandle) {
+        try { await deletePublicProfile(state.userHandle); } catch (e) { /* best-effort */ }
+      }
+      await supabase.auth.signOut();
+    } finally {
+      dispatch({ type: "DELETE_MY_ACCOUNT" });
+      setDeletingAccount(false);
+      setDeleteAccountConfirm(false);
+    }
+  };
+
 
   const theme = state.theme || { name: "Neon", mode: "night" };
   const setThemeMode = (mode) => dispatch({ type: "SET_THEME", theme: { mode } });
@@ -11013,7 +11079,30 @@ function Settings({ state, dispatch }) {
         ) : (
           <Btn variant="danger" onClick={() => setClearAllConfirm(true)}>🗑 Clear All Data</Btn>
         )}
+
+        <div style={{ height: 1, background: C.border, margin: "16px 0" }} />
+
+        {deleteAccountConfirm ? (
+          <div className="fade-in" style={{ background: C.redDim, border: `1px solid ${C.red}55`, borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <span style={{ fontSize: 16, color: C.red, flexShrink: 0 }}>⚠</span>
+              <div style={{ flex: 1, fontSize: 13, color: C.text, lineHeight: 1.5 }}>
+                Permanently delete your <b>account</b> — every trade, account, strategy, prop firm, payout, and note, plus your sign-in itself? This cannot be undone. You'll be signed out immediately and will need to sign up again from scratch to use the app.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn small variant="danger" onClick={deleteMyAccount} disabled={deletingAccount} style={{ flex: 1, justifyContent: "center" }}>{deletingAccount ? "Deleting…" : "Yes, Delete My Account"}</Btn>
+              <Btn small variant="ghost" onClick={() => setDeleteAccountConfirm(false)} disabled={deletingAccount} style={{ flex: 1, justifyContent: "center" }}>Cancel</Btn>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <Btn variant="danger" onClick={() => setDeleteAccountConfirm(true)}>⛔ Delete My Account</Btn>
+            <div style={{ fontSize: 11.5, color: C.textDim, marginTop: 8, lineHeight: 1.5 }}>Wipes all your data and signs you out for good — you'd need to sign up again to come back.</div>
+          </div>
+        )}
       </Card>
+
 
       </>)}
 
@@ -11164,7 +11253,7 @@ export default function App() {
   // handle changes or Public Profile gets turned off.
   const prevPublicHandleRef = useRef(null);
   const dispatch = useCallback(action => {
-    if (action.type === "CLEAR_ALL_DATA") allowEmptySaveRef.current = true;
+    if (action.type === "CLEAR_ALL_DATA" || action.type === "DELETE_MY_ACCOUNT") allowEmptySaveRef.current = true;
     setRawState(prev => reducer(prev, action));
   }, []);
 
