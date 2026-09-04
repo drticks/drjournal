@@ -8,7 +8,7 @@ import meditationAudio from "./meditation.mp3";
 import tradovateLogoUrl from "./trdovate.png";
 
 // ─── THEME — DR. JOURNAL (Neon) ─────────────────────────────────────────────────
-// C is intentionally a single mutable object — every component reads C.xxx at
+// C is intentionally a single mutable object — every component reads C.xxx a
 // render time, so mutating its properties (via applyTheme) re-colors the whole
 // app without needing to thread theme through every component as a prop.
 // Palette locked to the Dr. Journal brand marks: #A1E503 (neon green), #000000
