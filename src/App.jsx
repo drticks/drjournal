@@ -2054,7 +2054,6 @@ function MeditationCard({ open, onToggle }) {
     setPlaying(true);
     guardTime(target); // re-assert position in case play() itself resets it
   };
-  const skipBy = (secs) => seekTo(curTime + secs);
   const restart = () => { seekTo(0); const a = audioRef.current; if (a && !playing) { a.play(); setPlaying(true); } };
   const seekDrag = useDragBar(pct => seekTo(pct * liveDuration()));
   const volumeDrag = useDragBar(pct => { setVolume(pct); if (pct > 0) setMuted(false); });
@@ -2063,17 +2062,12 @@ function MeditationCard({ open, onToggle }) {
   const pct = duration ? (curTime / duration) * 100 : 0;
   const effVolume = muted ? 0 : volume;
 
-  const skipBtnStyle = { width: 40, height: 40, borderRadius: "50%", background: C.surfaceHigh, border: `1px solid ${C.border}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.text, flexShrink: 0 };
-
   return (
     <PrepCard icon={<NavIcon name="preparation" size={19} />} title="Guided Meditation" subtitle="14 minutes · sit back, put in headphones, and let it run."
       open={open} onToggle={onToggle} done={false} doneLabel="">
       <audio ref={audioRef} src={meditationAudio} preload="auto" />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0 4px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 22 }}>
-          <button onClick={() => skipBy(-10)} title="Back 10s" style={skipBtnStyle}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 12a9.5 9.5 0 1 0 3-6.9" /><path d="M2.5 4.5v5h5" /></svg>
-          </button>
           <div style={{
             width: 108, height: 108, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
             background: `radial-gradient(circle, ${C.accentDim}, transparent 70%)`,
@@ -2088,9 +2082,6 @@ function MeditationCard({ open, onToggle }) {
               )}
             </button>
           </div>
-          <button onClick={() => skipBy(10)} title="Forward 10s" style={skipBtnStyle}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 12a9.5 9.5 0 1 1-3-6.9" /><path d="M21.5 4.5v5h-5" /></svg>
-          </button>
         </div>
 
         <div style={{ width: "100%", maxWidth: 380 }}>
