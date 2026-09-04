@@ -2288,14 +2288,14 @@ const TZ_OPTIONS = [
   { id: "sydney", label: "Sydney (GMT+10)", offset: 10 },
   { id: "auckland", label: "Auckland (GMT+12)", offset: 12 },
 ];
-// The 4 major forex sessions — standard approximate UTC trading-hour ranges
-// (the common convention most forex education sites cite; based on each
-// financial center's typical business hours, not an exact contract).
+// The 4 major forex sessions. Hours below are set from the user's own
+// stated local session times (UTC+5): Sydney 2am-11am, Tokyo 5am-2pm,
+// London 12pm-9pm, New York 5pm-2am — converted to UTC by subtracting 5h.
 const FX_SESSIONS = [
-  { id: "sydney", label: "Sydney", ownOffset: 10, startUTC: 22, endUTC: 7, color: "#00E5FF" },
+  { id: "sydney", label: "Sydney", ownOffset: 10, startUTC: 21, endUTC: 6, color: "#00E5FF" },
   { id: "tokyo", label: "Tokyo", ownOffset: 9, startUTC: 0, endUTC: 9, color: "#B026FF" },
-  { id: "london", label: "London", ownOffset: 0, startUTC: 8, endUTC: 17, color: "#38bdf8" },
-  { id: "newyork", label: "New York", ownOffset: -5, startUTC: 13, endUTC: 22, color: "#A1E503" },
+  { id: "london", label: "London", ownOffset: 0, startUTC: 7, endUTC: 16, color: "#38bdf8" },
+  { id: "newyork", label: "New York", ownOffset: -5, startUTC: 12, endUTC: 21, color: "#A1E503" },
 ];
 function fxSessionOpenAt(session, utcHour) {
   const { startUTC: s, endUTC: e } = session;
