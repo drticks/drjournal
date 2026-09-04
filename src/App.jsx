@@ -2313,96 +2313,6 @@ function fxSessionBars(session, displayOffset) {
   ];
   return [{ startPct: (start / 24) * 100, widthPct: ((end - start) / 24) * 100 }];
 }
-// 12-hour clock label with no space before am/pm, e.g. "5:00am" — matches
-// how session-clock tools like this conventionally format it.
-function fmtClock12(d) {
-  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "").toLowerCase();
-}
-// Short hour-of-day tick label, e.g. 17 -> "5pm", 0 -> "12am".
-function fmtHourTick(h) {
-  const hh = ((h % 24) + 24) % 24;
-  const period = hh < 12 ? "am" : "pm";
-  const label = hh % 12 === 0 ? 12 : hh % 12;
-  return `${label}${period}`;
-}
-function fmtDurHM(hoursFloat) {
-  const totalMin = Math.max(0, Math.round(hoursFloat * 60));
-  return `${Math.floor(totalMin / 60)}hr ${totalMin % 60}min`;
-}
-// Where a session's open interval lands inside a 24h ruler window that
-// starts at windowStartAbs (a continuous, un-wrapped "display-local" hour
-// count, e.g. "now - 12"), splitting it into 1-2 [startPct,widthPct] bars
-// when the window boundary falls in the middle of the open interval.
-function sessionRulerBars(session, displayOffset, windowStartAbs) {
-  const shift = (h) => ((h + displayOffset) % 24 + 24) % 24;
-  const startDisp = shift(session.startUTC), endDisp = shift(session.endUTC);
-  const duration = ((endDisp - startDisp) % 24 + 24) % 24 || 24;
-  const w = ((windowStartAbs % 24) + 24) % 24;
-  const fracStart = ((startDisp - w) % 24 + 24) % 24;
-  if (fracStart + duration <= 24) return [{ startPct: (fracStart / 24) * 100, widthPct: (duration / 24) * 100 }];
-  const firstW = 24 - fracStart;
-  return [
-    { startPct: (fracStart / 24) * 100, widthPct: (firstW / 24) * 100 },
-    { startPct: 0, widthPct: ((duration - firstW) / 24) * 100 },
-  ];
-}
-// A compact, ForexFactory-style "Sessions" strip: a 24h ruler centered on
-// now, with each of the 4 major sessions drawn as a pill (colored while
-// open, gray while closed) showing that city's current local time — and,
-// on hover, a countdown to when that session next begins or ends,
-// converted into the viewer's own local time ("your time").
-function SessionsTimeline({ now, displayOffset, utcHourNow }) {
-  const [hoverId, setHoverId] = useState(null);
-  const nowDispAbs = utcHourNow + displayOffset;
-  const windowStartAbs = nowDispAbs - 12; // "now" sits at the 50% mark
-  const ticks = Array.from({ length: 13 }, (_, i) => windowStartAbs + i * 2);
-
-  return (
-    <div>
-      <div style={{ position: "relative", height: 16, marginBottom: 10 }}>
-        {ticks.map((t, i) => (
-          <div key={i} style={{ position: "absolute", left: `${(i / 12) * 100}%`, transform: "translateX(-50%)", fontSize: 10, color: C.textDim, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtHourTick(t)}</div>
-        ))}
-      </div>
-      <div style={{ position: "relative", paddingTop: 2 }}>
-        <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 2, background: C.accent, boxShadow: `0 0 8px ${C.accent}aa`, zIndex: 2 }} />
-        {FX_SESSIONS.map(s => {
-          const open = fxSessionOpenAt(s, utcHourNow);
-          const bars = sessionRulerBars(s, displayOffset, windowStartAbs);
-          const localNow = new Date(now.getTime() + s.ownOffset * 3600000 + now.getTimezoneOffset() * 60000);
-
-          let hoverMsg = null;
-          if (hoverId === s.id) {
-            const untilStart = ((s.startUTC - utcHourNow) % 24 + 24) % 24;
-            const untilEnd = ((s.endUTC - utcHourNow) % 24 + 24) % 24;
-            const delta = open ? untilEnd : untilStart;
-            const at = new Date(now.getTime() + delta * 3600000);
-            hoverMsg = `${open ? "Ends" : "Begins"} in ${fmtDurHM(delta)} (${fmtClock12(at)} your time)`;
-          }
-
-          return (
-            <div key={s.id} onMouseEnter={() => setHoverId(s.id)} onMouseLeave={() => setHoverId(null)}
-              style={{ position: "relative", height: 34, marginBottom: 6, borderRadius: 6, background: C.bg, overflow: "hidden" }}>
-              {bars.map((b, i) => (
-                <div key={i} style={{ position: "absolute", left: `${b.startPct}%`, width: `${b.widthPct}%`, top: 0, bottom: 0, background: open ? s.color : C.borderLight, opacity: open ? 0.92 : 1, transition: "background 0.2s" }} />
-              ))}
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", paddingLeft: `calc(${bars[0].startPct}% + 10px)`, paddingRight: 10, gap: 6, minWidth: 0 }}>
-                {hoverMsg ? (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: open ? "#fff" : C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{hoverMsg}</span>
-                ) : (
-                  <>
-                    <span style={{ fontSize: 12.5, fontWeight: 800, color: open ? "#fff" : C.text, whiteSpace: "nowrap" }}>{s.label}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: open ? "#fff" : C.textMuted, opacity: open ? 0.9 : 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtClock12(localNow)} local</span>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 function MarketHoursPage({ state }) {
   const [now, setNow] = useState(new Date());
   const [tz, setTz] = useState("local");
@@ -2414,6 +2324,9 @@ function MarketHoursPage({ state }) {
 
   const utcHourNow = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
   const nowPct = (((utcHourNow + displayOffset) % 24 + 24) % 24) / 24 * 100;
+  const displayDate = new Date(now.getTime() + displayOffset * 3600000 + now.getTimezoneOffset() * 60000);
+  const nowLabel = displayDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const nowWeekday = displayDate.toLocaleDateString("en-US", { weekday: "short" });
 
   const openCount = FX_SESSIONS.filter(s => fxSessionOpenAt(s, utcHourNow)).length;
   const activity = openCount >= 2 ? "High" : openCount === 1 ? "Medium" : "Low";
@@ -2433,6 +2346,7 @@ function MarketHoursPage({ state }) {
   const linePath = pathPts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
   const areaPath = `${linePath} L${chartW},${chartH} L0,${chartH} Z`;
 
+  const hourMarks = Array.from({ length: 12 }, (_, i) => i * 2);
 
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28 }}>
@@ -2443,7 +2357,54 @@ function MarketHoursPage({ state }) {
       } />
 
       <Card style={{ overflow: "visible" }}>
-        <SessionsTimeline now={now} displayOffset={displayOffset} utcHourNow={utcHourNow} />
+        {/* Hour ruler + now marker */}
+        <div style={{ display: "flex", marginBottom: 4 }}>
+          <div style={{ width: 180, flexShrink: 0 }} />
+          <div style={{ flex: 1, position: "relative", height: 34 }}>
+            <div style={{ position: "absolute", left: nowPct + "%", top: 0, transform: "translateX(-50%)", zIndex: 3, whiteSpace: "nowrap", textAlign: "center" }}>
+              <div style={{ background: C.accent, color: "#000", fontSize: 11, fontWeight: 800, padding: "4px 9px", borderRadius: 8, boxShadow: `0 0 12px ${C.accent}88` }}>{nowLabel}</div>
+              <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>{nowWeekday}</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ width: 180, flexShrink: 0, display: "flex", justifyContent: "center", color: C.yellow }}><NavIcon name="sun" size={13} /></div>
+          <div style={{ flex: 1, position: "relative", height: 14 }}>
+            {hourMarks.map(h => (
+              <div key={h} style={{ position: "absolute", left: `${(h / 24) * 100}%`, transform: "translateX(-50%)", fontSize: 9.5, color: C.textDim, whiteSpace: "nowrap" }}>{h}</div>
+            ))}
+            <div style={{ position: "absolute", right: -18, top: -1, color: C.blue }}><NavIcon name="moon" size={12} /></div>
+          </div>
+        </div>
+
+        {/* Now vertical line + session rows */}
+        <div style={{ position: "relative" }}>
+          <div style={{ position: "absolute", left: `calc(180px + (100% - 180px) * ${nowPct / 100})`, top: 0, bottom: 0, width: 2, background: C.accent, opacity: 0.5, zIndex: 1 }} />
+          {FX_SESSIONS.map(s => {
+            const localNow = new Date(now.getTime() + s.ownOffset * 3600000 + now.getTimezoneOffset() * 60000);
+            const open = fxSessionOpenAt(s, utcHourNow);
+            return (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", padding: "12px 0", borderTop: `1px solid ${C.border}` }}>
+                <div style={{ width: 180, flexShrink: 0, paddingRight: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+                    <span style={{ fontWeight: 800, fontSize: 14 }}>{s.label}</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{localNow.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}</div>
+                  <div style={{ fontSize: 10.5, color: C.textDim }}>{localNow.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })} · UTC{s.ownOffset >= 0 ? "+" : ""}{s.ownOffset}</div>
+                </div>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: open ? s.color : C.textDim, marginBottom: 6 }}>{s.label.toUpperCase()} SESSION {open ? "OPEN" : "CLOSED"}</div>
+                  <div style={{ position: "relative", height: 26, background: C.bg, borderRadius: 6, overflow: "hidden" }}>
+                    {fxSessionBars(s, displayOffset).map((b, i) => (
+                      <div key={i} style={{ position: "absolute", left: `${b.startPct}%`, width: `${b.widthPct}%`, top: 0, bottom: 0, background: s.color, opacity: open ? 0.9 : 0.35, borderRadius: 4 }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </Card>
 
       <Card style={{ marginTop: 18 }}>
