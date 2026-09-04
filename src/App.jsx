@@ -5,6 +5,7 @@ import { loadCloudStateWithRetry, saveCloudState, flushCloudStateSync, getLocalC
 import logoUrl from "./logo.png";
 import logoUrlDay from "./logo2.png";
 import meditationAudio from "./meditation.mp3";
+import tradovateLogoUrl from "./trdovate.png";
 
 // ─── THEME — DR. JOURNAL (Neon) ─────────────────────────────────────────────────
 // C is intentionally a single mutable object — every component reads C.xxx at
@@ -356,6 +357,11 @@ const ACCOUNT_COLORS = [C.accent, C.yellow, C.blue, "#ff8844", "#cc44ff", "#44cc
 // charging real money.
 const PLAN_NAME = { free: "Journal Basic", plus: "Journal Plus" };
 const FREE_LIMITS = { maxTrades: 40, maxAccounts: 1, maxSetups: 4, maxScreenshots: 1 };
+// Handle / Public Profile / Find Traders is temporarily disabled (reported
+// not working) — flip this back on once it's fixed. Hides the "Handle"
+// field in Account settings plus the Public Profile and Find Traders cards;
+// doesn't touch anyone's already-stored handle/profilePublic data.
+const FEATURE_USERNAME_ENABLED = false;
 const PLUS_ONLY_PAGES = { mynotes: "My Notes", analytics: "Analytics", emotions: "Edge Score", finances: "Prop Firms", livecapital: "Live Capital", myrecord: "My Record" };
 // ── PROMO MODE ──────────────────────────────────────────────────────────────
 // All Journal Plus-gated features are temporarily unlocked for every user while we
@@ -5942,7 +5948,7 @@ const IMPORT_SOURCES = [
   { id: "topstepx", name: "TopStepX CSV", icon: "TX", iconBg: "#00000022", iconColor: C.text,
     desc: "Import trades directly from TopStepX platform exports.",
     tags: [{ label: "Auto-mapping", color: C.accent }, { label: "Duplicate Detection", color: C.accent }] },
-  { id: "tradovate", name: "Tradovate CSV", icon: "TV", iconBg: C.blueDim, iconColor: C.blue,
+  { id: "tradovate", name: "Tradovate CSV", icon: "TV", iconImg: tradovateLogoUrl, iconBg: C.blueDim, iconColor: C.blue,
     desc: "Import trades from Tradovate Performance Reports.",
     note: "Automatically merges split fills executed on the same order into one trade, and tags each trade with the session it was traded in based on its time.",
     tags: [{ label: "Auto-mapping", color: C.blue }, { label: "P&L included", color: C.blue }, { label: "Merges Split Fills", color: C.blue }, { label: "Auto Session Detection", color: C.blue }] },
@@ -5978,7 +5984,9 @@ function ImportSourceCard({ src, onFile, busy }) {
       {src.badge && !disabled && <div style={{ position: "absolute", top: 16, right: 16, background: src.badgeColor, color: "#fff", fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 20, letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 4 }}>✦ {src.badge}</div>}
       {disabled && <div style={{ position: "absolute", top: 16, right: 16, background: C.surfaceHigh, color: C.textMuted, fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 20, letterSpacing: 0.5 }}>COMING SOON</div>}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ width: 50, height: 50, borderRadius: 12, background: src.iconBg || C.surfaceHigh, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: src.iconColor || C.text, border: `1px solid ${C.border}` }}>{src.icon}</div>
+        <div style={{ width: 50, height: 50, borderRadius: 12, background: src.iconBg || C.surfaceHigh, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: src.iconColor || C.text, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+          {src.iconImg ? <img src={src.iconImg} alt={src.name} style={{ width: "100%", height: "100%", objectFit: "contain", padding: 8, boxSizing: "border-box" }} /> : src.icon}
+        </div>
         <button onClick={() => !disabled && !busy && fileRef.current?.click()} disabled={disabled || busy} style={{ width: 34, height: 34, borderRadius: 9, border: "none", background: C.surfaceHigh, color: disabled ? C.textDim : (src.iconColor || C.accent), cursor: disabled ? "not-allowed" : (busy ? "wait" : "pointer"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>{busy === src.id ? "…" : "→"}</button>
       </div>
       <div style={{ flex: 1 }}>
@@ -10647,6 +10655,7 @@ function Settings({ state, dispatch }) {
           <Inp label="Display Name" value={displayNameInput} onChange={setDisplayNameInput} placeholder="Your name" style={{ maxWidth: 300 }} />
           <Btn onClick={saveDisplayName} disabled={!displayNameInput.trim() || displayNameInput.trim() === state.currentUser?.name}>Save</Btn>
         </div>
+        {FEATURE_USERNAME_ENABLED && (
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "end", flexWrap: "wrap" }}>
             <div>
@@ -10660,6 +10669,7 @@ function Settings({ state, dispatch }) {
           </div>
           {handleError ? <div style={{ fontSize: 11.5, color: C.red, marginTop: 6 }}>{handleError}</div> : <div style={{ fontSize: 11, color: C.textDim, marginTop: 6 }}>Shown under your name in the account menu.</div>}
         </div>
+        )}
 
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 18 }}>
           <SectionLabel>Change Password</SectionLabel>
@@ -10673,6 +10683,7 @@ function Settings({ state, dispatch }) {
         </div>
       </Card>
 
+      {FEATURE_USERNAME_ENABLED && (<>
       <Card>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 4 }}>
           <div>
@@ -10733,6 +10744,7 @@ function Settings({ state, dispatch }) {
       </Card>
 
       {viewingHandle && <PublicProfileView handle={viewingHandle} onClose={() => setViewingHandle(null)} />}
+      </>)}
 
       </>)}
 
