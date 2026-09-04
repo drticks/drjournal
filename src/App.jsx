@@ -2427,17 +2427,26 @@ function MarketHoursPage({ state }) {
 }
 
 // ─── LIVE SESSION CLOCK (header) ─────────────────────────────────────────────
-// Standard forex/futures session bands in UTC. Order matters — first match wins.
+// User-defined session bands, given in local UTC+5 and converted to UTC
+// here (UTC = local - 5) so they work regardless of the viewer's own
+// timezone. Order matters — first match wins. Contiguous, no gaps/overlap:
+//   Sydney        2:00–4:59am  local -> 21:00–24:00 UTC
+//   Asia          5:00–10:59am local -> 00:00–06:00 UTC
+//   Pre-London   11:00–11:59am local -> 06:00–07:00 UTC
+//   London       12:00–3:59pm  local -> 07:00–11:00 UTC
+//   Pre-New York  4:00–4:59pm  local -> 11:00–12:00 UTC
+//   NY Open       5:00–6:29pm  local -> 12:00–13:30 UTC
+//   NYSE          6:30–7:59pm  local -> 13:30–15:00 UTC
+//   New York      8:00pm–2am   local -> 15:00–21:00 UTC
 const TRADING_SESSIONS =  [
-  { label: "Asian Session",       start: 0,    end: 6,    color: C.blue },
-  { label: "Pre-London",          start: 6,    end: 7,    color: "#38bdf8" },
-  { label: "London Session",      start: 7,    end: 11,   color: C.purple },
-  { label: "Pre-NY",              start: 11,   end: 12,   color: C.yellow },
-  { label: "NY Open",             start: 12,   end: 13, color: C.accent },
-  { label: "London/NY Overlap",   start: 13,   end: 13.5,   color: "#ff8844" },
-  { label: "NYSE Open",           start: 13.5, end: 16.5,   color: C.accent2 },
-  { label: "NY Close",            start: 16.5,   end: 21,   color: C.red },
-  { label: "Sydney/Asian Pre",    start: 21,   end: 24,   color: C.blue },
+  { label: "Asia",          start: 0,    end: 6,    color: "#38bdf8" },
+  { label: "Pre-London",    start: 6,    end: 7,    color: C.yellow },
+  { label: "London",        start: 7,    end: 11,   color: C.purple },
+  { label: "Pre-New York",  start: 11,   end: 12,   color: "#ff8844" },
+  { label: "NY Open",       start: 12,   end: 13.5, color: C.accent },
+  { label: "NYSE",          start: 13.5, end: 15,   color: C.accent2 },
+  { label: "New York",      start: 15,   end: 21,   color: C.red },
+  { label: "Sydney",        start: 21,   end: 24,   color: C.blue },
 ];
 function getTradingSession(date) {
   const h = date.getUTCHours();
