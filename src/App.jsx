@@ -5,7 +5,7 @@ import { loadCloudStateWithRetry, saveCloudState, flushCloudStateSync, getLocalC
 import logoUrl from "./logo.png";
 import logoUrlDay from "./logo2.png";
 import meditationAudio from "./meditation.mp3";
-import tradovateLogoUrl from "./trdovate.png";
+import tradovateLogoUrl from "./tradovate.png";
 
 // ─── THEME — DR. JOURNAL (Neon) ─────────────────────────────────────────────────
 // C is intentionally a single mutable object — every component reads C.xxx at
