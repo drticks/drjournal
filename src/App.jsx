@@ -2313,6 +2313,90 @@ function fxSessionBars(session, displayOffset) {
   ];
   return [{ startPct: (start / 24) * 100, widthPct: ((end - start) / 24) * 100 }];
 }
+// A big 24-hour analog "session clock" for the Market Hours page: a ring
+// divided into colored wedges — one per TRADING_SESSIONS band (Sydney,
+// Asia, Pre-London, London, Pre-New York, NY Open, NYSE, New York) — with a
+// hand pointing at the current time. The ring's hour positions follow
+// whichever timezone the page's selector is set to; which session is
+// "live" is a real moment in time and doesn't depend on that choice.
+function polarPoint(cx, cy, r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+}
+function ringWedgePath(cx, cy, rOuter, rInner, startAngle, endAngle) {
+  const large = endAngle - startAngle > 180 ? 1 : 0;
+  const [x1, y1] = polarPoint(cx, cy, rOuter, startAngle);
+  const [x2, y2] = polarPoint(cx, cy, rOuter, endAngle);
+  const [x3, y3] = polarPoint(cx, cy, rInner, endAngle);
+  const [x4, y4] = polarPoint(cx, cy, rInner, startAngle);
+  return `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`;
+}
+// Splits a UTC start-to-end band into 1-2 [startHour,endHour] pieces once
+// shifted into display-local hours, for the case where the shift pushes the
+// band across the display's own midnight.
+function bandLocalSegments(start, end, offset) {
+  const s = ((start + offset) % 24 + 24) % 24;
+  const e = ((end + offset) % 24 + 24) % 24;
+  if (e > s) return [[s, e]];
+  return [[s, 24], [0, e]];
+}
+function fmtClockTick(h) {
+  const period = h < 12 ? "am" : "pm";
+  const label = h % 12 === 0 ? 12 : h % 12;
+  return `${label}${period}`;
+}
+function SessionClockFace({ now, displayOffset, tzLabel }) {
+  const size = 300, cx = size / 2, cy = size / 2, rOuter = 130, rInner = 96, rHand = 78;
+  const hourToAngle = (h) => (h / 24) * 360 - 90; // 0 (midnight, local) at top, clockwise
+
+  const localHourNow = (((now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600) + displayOffset) % 24 + 24) % 24;
+  const handAngle = hourToAngle(localHourNow);
+  const [hx, hy] = polarPoint(cx, cy, rHand, handAngle);
+
+  const activeSession = getTradingSession(now);
+  const timeLabel = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 28, alignItems: "center", justifyContent: "center" }}>
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <svg viewBox={`0 0 ${size} ${size}`} width={280} height={280}>
+          <circle cx={cx} cy={cy} r={rOuter + 6} fill="none" stroke={C.border} strokeWidth="1" />
+          {TRADING_SESSIONS.flatMap((s, si) =>
+            bandLocalSegments(s.start, s.end, displayOffset).map(([segStart, segEnd], i) => (
+              <path key={`${si}-${i}`} d={ringWedgePath(cx, cy, rOuter, rInner, hourToAngle(segStart), hourToAngle(segEnd))}
+                fill={s.color} opacity={activeSession.label === s.label ? 0.95 : 0.4} stroke={C.bg} strokeWidth="1.5" />
+            ))
+          )}
+          {Array.from({ length: 8 }, (_, i) => i * 3).map(h => {
+            const [tx, ty] = polarPoint(cx, cy, rOuter + 18, hourToAngle(h));
+            return <text key={h} x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fontSize="10.5" fontWeight="700" fill={C.textDim}>{fmtClockTick(h)}</text>;
+          })}
+          <circle cx={cx} cy={cy} r={rInner - 10} fill={C.surface} stroke={C.border} strokeWidth="1" />
+          <line x1={cx} y1={cy} x2={hx} y2={hy} stroke={C.accent} strokeWidth="3" strokeLinecap="round" style={{ filter: `drop-shadow(0 0 4px ${C.accent}aa)` }} />
+          <circle cx={cx} cy={cy} r="5" fill={C.accent} />
+          <text x={cx} y={cy - 14} textAnchor="middle" fontSize="20" fontWeight="800" fill={C.text} className="mono">{timeLabel}</text>
+          <text x={cx} y={cy + 8} textAnchor="middle" fontSize="12" fontWeight="800" fill={activeSession.color}>{activeSession.label}</text>
+          <text x={cx} y={cy + 24} textAnchor="middle" fontSize="9" fontWeight="600" fill={C.textDim}>{tzLabel}</text>
+        </svg>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 200 }}>
+        {TRADING_SESSIONS.map(s => {
+          const isNow = activeSession.label === s.label;
+          const localStart = ((s.start + displayOffset) % 24 + 24) % 24;
+          const localEnd = ((s.end + displayOffset) % 24 + 24) % 24;
+          const fmtT = (h) => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60); const d = new Date(); d.setHours(hh, mm, 0, 0); return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }); };
+          return (
+            <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, background: isNow ? s.color + "1c" : "transparent", border: `1px solid ${isNow ? s.color + "55" : "transparent"}` }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, flexShrink: 0, boxShadow: isNow ? `0 0 8px ${s.color}` : "none" }} />
+              <span style={{ fontSize: 12.5, fontWeight: isNow ? 800 : 600, color: isNow ? C.text : C.textMuted, flex: 1 }}>{s.label}</span>
+              <span className="mono" style={{ fontSize: 11, color: C.textDim, whiteSpace: "nowrap" }}>{fmtT(localStart)}–{fmtT(localEnd)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function MarketHoursPage({ state }) {
   const [now, setNow] = useState(new Date());
   const [tz, setTz] = useState("local");
@@ -2355,6 +2439,12 @@ function MarketHoursPage({ state }) {
           {TZ_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
       } />
+
+      <Card style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 4 }}>Live Session Clock</div>
+        <div style={{ fontSize: 11.5, color: C.textMuted, marginBottom: 18 }}>Where the day stands right now across Sydney, Asia, London, and New York's trading windows.</div>
+        <SessionClockFace now={now} displayOffset={displayOffset} tzLabel={opt.label} />
+      </Card>
 
       <Card style={{ overflow: "visible" }}>
         {/* Hour ruler + now marker */}
