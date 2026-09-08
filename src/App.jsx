@@ -6315,6 +6315,185 @@ function JournalFieldTextarea({ value, onSave, placeholder, rows = 4 }) {
   );
 }
 
+// Small single-line input variant of JournalFieldTextarea, used by the
+// Pre-Trade Checklist's "Trade Card" fields (short values like Instrument,
+// Stop, Target — not paragraphs).
+function JournalFieldInput({ value, onSave, placeholder }) {
+  const [v, setV] = useState(value || "");
+  useEffect(() => { setV(value || ""); }, [value]);
+  return (
+    <input value={v} onChange={e => setV(e.target.value)} onBlur={() => { if (v !== (value || "")) onSave(v); }}
+      placeholder={placeholder}
+      style={{ width: "100%", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: "10px 14px", fontSize: 13.5, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+  );
+}
+
+// ─── PRE-TRADE CHECKLIST (from the "August Trading Lessons" rulebook) ───────
+// Stored per-day under journalNotes[date].checklist = { checks: {id:bool},
+// card: {field:string}, decision: "take"|"wait"|"" } — same day-keyed
+// mechanism as the rest of My Notes, so it shows up in the same Past
+// Entries calendar automatically.
+const AUGUST_RULES = [
+  { t: "Control greed and oversizing.", d: "A good setup does not justify taking excessive size." },
+  { t: "Do not chase a missed trade.", d: "If the entry is gone, let it go. Wait for the next opportunity." },
+  { t: "Patience creates better positions.", d: "I do not need to force a trade." },
+  { t: "Follow the initial plan and zones.", d: "Abandoning my plan turns good ideas into impulsive losses." },
+  { t: "Manage risk before sizing up.", d: "Calculate the stop-loss and risk first — then size, never the reverse." },
+  { t: "Size up only on true A+ setups.", d: "Reserved for the clearest setups with no meaningful conflicts." },
+  { t: "Keep targets logical.", d: "Aim for a sensible 1:1 with a small but logical stop-loss." },
+  { t: "Do not revenge-trade after a stop-out.", d: "Lock out the account if necessary to prevent overtrading." },
+  { t: "Respect the higher-timeframe move.", d: "Have the patience to hold rather than taking profit too early." },
+  { t: "On Wednesday, be prepared for the bigger move.", d: "Consider holding partials with the full stop rather than closing early." },
+  { t: "Trade my own plan and collect data.", d: "Impulse trades only at the smallest size, to build data/confidence." },
+  { t: "Take 80% partials and let the rest run.", d: "Secure the trade, and let a small position capture more of the move." },
+  { t: "Wait for confirmation/closure.", d: "Waiting for confirmation makes the trade work in my favor more often." },
+  { t: "Wait for the next playbook setup.", d: "After a loss: not revenge, not random entries, not oversized." },
+  { t: "Place stops below zones, not just candles.", d: "The stop belongs around the invalidation zone." },
+  { t: "Do not trade gut feeling.", d: "If I can't explain setup, risk, invalidation, and reason — I don't trade it." },
+];
+const CHECKLIST_GROUPS = [
+  { id: "setup", label: "Setup", icon: "🧭", color: C.blue, items: [
+    { id: "s1", text: "Is this a valid playbook setup — not a random opportunity?" },
+    { id: "s2", text: "Have I identified the relevant zone/level and the reason price should react there?" },
+    { id: "s3", text: "Am I following my initial plan, or changing it because of an impulse move?" },
+    { id: "s4", text: "Do I have the required confirmation/closure before entry?" },
+  ]},
+  { id: "risk", label: "Risk & Size", icon: "⚖️", color: C.yellow, items: [
+    { id: "r1", text: "Have I defined my invalidation and stop-loss before choosing position size?" },
+    { id: "r2", text: "Is the stop placed around the zone/invalidation — not simply behind a candle?" },
+    { id: "r3", text: "Is the position size within my planned risk?" },
+    { id: "r4", text: "Am I sizing up because this is truly A+, or because I feel greedy/confident?" },
+  ]},
+  { id: "mental", label: "Mental State", icon: "🧠", color: C.purple, items: [
+    { id: "m1", text: "Am I calm, patient, and following process?" },
+    { id: "m2", text: "Am I trying to recover a previous loss?" },
+    { id: "m3", text: "Am I chasing a missed move?" },
+    { id: "m4", text: "Am I trading on gut feeling without enough evidence?" },
+  ]},
+  { id: "commit", label: "Final Commitment", icon: "🤝", color: C.accent, items: [
+    { id: "c1", text: "I can explain the setup, risk, invalidation, and reason for entry — without saying \"I just feel it.\"" },
+    { id: "c2", text: "I am willing to accept the loss before I enter." },
+  ]},
+];
+const CHECKLIST_CARD_FIELDS = [
+  { id: "instrument", label: "Instrument" },
+  { id: "setupPlaybook", label: "Setup / Playbook" },
+  { id: "htf", label: "HTF Direction / Context" },
+  { id: "entryZone", label: "Entry Zone" },
+  { id: "confirmation", label: "Confirmation" },
+  { id: "stop", label: "Stop / Invalidation" },
+  { id: "riskSize", label: "Risk / Position Size" },
+  { id: "target", label: "Target / 80% Partial" },
+  { id: "whyAPlus", label: "Why this is A+" },
+];
+function checklistCompletion(cl) {
+  if (!cl) return { checked: 0, total: 0 };
+  const allItems = CHECKLIST_GROUPS.flatMap(g => g.items);
+  const checked = allItems.filter(it => cl.checks?.[it.id]).length;
+  return { checked, total: allItems.length };
+}
+function hasChecklistData(cl) {
+  if (!cl) return false;
+  const anyCheck = cl.checks && Object.values(cl.checks).some(Boolean);
+  const anyCard = cl.card && Object.values(cl.card).some(v => v && String(v).trim());
+  return !!(anyCheck || anyCard || cl.decision);
+}
+
+function ChecklistTab({ todayEntry, saveField }) {
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const checklist = todayEntry.checklist || {};
+  const checks = checklist.checks || {};
+  const card = checklist.card || {};
+  const decision = checklist.decision || "";
+
+  const setChecklist = (patch) => saveField("checklist", { checks, card, decision, ...patch });
+  const toggleCheck = (id) => setChecklist({ checks: { ...checks, [id]: !checks[id] } });
+  const setCard = (id, value) => setChecklist({ card: { ...card, [id]: value } });
+  const setDecision = (val) => setChecklist({ decision: decision === val ? "" : val });
+
+  const { checked, total } = checklistCompletion(checklist);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 780, margin: "0 auto", width: "100%" }}>
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div onClick={() => setRulesOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", cursor: "pointer" }}>
+          <span style={{ fontSize: 18 }}>📖</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>The 16 Rules — August Trading Lessons</div>
+            <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Read before every trade — especially after a loss.</div>
+          </div>
+          <span style={{ color: C.textDim, fontSize: 13 }}>{rulesOpen ? "▴" : "▾"}</span>
+        </div>
+        {rulesOpen && (
+          <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {AUGUST_RULES.map((r, i) => (
+              <div key={i} style={{ fontSize: 13, lineHeight: 1.5, paddingLeft: 14, borderLeft: `2px solid ${C.border}` }}>
+                <span style={{ fontWeight: 700, color: C.accent }}>{i + 1}. {r.t}</span>
+                <div style={{ color: C.textMuted, marginTop: 2 }}>{r.d}</div>
+              </div>
+            ))}
+            <div style={{ textAlign: "center", fontSize: 12.5, color: C.textDim, fontStyle: "italic", marginTop: 4 }}>"I do not need to catch every move. I need to execute my plan correctly."</div>
+          </div>
+        )}
+      </Card>
+
+      <Card style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700 }}>☑️ Before I Enter</div>
+        <Badge color={checked === total ? C.accent : C.yellow}>{checked}/{total} checked</Badge>
+      </Card>
+
+      {CHECKLIST_GROUPS.map(group => (
+        <Card key={group.id}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <span style={{ fontSize: 17 }}>{group.icon}</span>
+            <div style={{ fontWeight: 800, fontSize: 15, color: group.color }}>{group.label}</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {group.items.map(item => {
+              const active = !!checks[item.id];
+              return (
+                <label key={item.id} onClick={() => toggleCheck(item.id)} style={{
+                  display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer",
+                  background: active ? group.color + "14" : C.surfaceHigh, border: `1px solid ${active ? group.color + "55" : C.border}`,
+                }}>
+                  <span style={{
+                    flexShrink: 0, width: 20, height: 20, borderRadius: 6, marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: active ? group.color : "transparent", border: `1.5px solid ${active ? group.color : C.border}`, color: "#001018", fontSize: 12, fontWeight: 800,
+                  }}>{active ? "✓" : ""}</span>
+                  <span style={{ fontSize: 13.5, lineHeight: 1.5, color: active ? C.text : C.textMuted }}>{item.text}</span>
+                </label>
+              );
+            })}
+          </div>
+        </Card>
+      ))}
+
+      <Card>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span style={{ fontSize: 17 }}>🗂</span>
+          <div><div style={{ fontWeight: 800, fontSize: 15 }}>Trade Card</div><div style={{ fontSize: 12, color: C.textDim }}>Fill this out before entering. If the answers are weak, wait.</div></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          {CHECKLIST_CARD_FIELDS.map(f => (
+            <div key={f.id} style={{ gridColumn: ["whyAPlus"].includes(f.id) ? "1 / -1" : "auto" }}>
+              <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>{f.label}</div>
+              <JournalFieldInput value={card[f.id]} onSave={v => setCard(f.id, v)} placeholder={f.label} />
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Emotional State</div>
+        <JournalFieldInput value={card.emotionalState} onSave={v => setCard("emotionalState", v)} placeholder="Calm / Anxious / Excited / Frustrated…" />
+
+        <div style={{ marginTop: 18, marginBottom: 6, fontSize: 13, fontWeight: 700 }}>Final Decision</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <button onClick={() => setDecision("take")} style={segBtnStyle(decision === "take", C.accent, "#001018")}>✓ Take Trade</button>
+          <button onClick={() => setDecision("wait")} style={segBtnStyle(decision === "wait", C.red, "#fff")}>⏸ Wait / No Trade</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function MyNotes({ state, dispatch }) {
   const journalNotes = state.journalNotes || {};
   const [tab, setTab] = useState("graces");
@@ -6360,13 +6539,13 @@ function MyNotes({ state, dispatch }) {
   const hasEntry = (k) => {
     const e = journalNotes[k];
     if (!e) return false;
-    return !!(e.quickNotes || e.selfReview || e.mentorNotes || e.mainGoal || e.feelingResults || (e.graces && e.graces.some(Boolean)));
+    return !!(e.quickNotes || e.selfReview || e.mentorNotes || e.mainGoal || e.feelingResults || (e.graces && e.graces.some(Boolean)) || hasChecklistData(e.checklist));
   };
   const matchesSearch = (k) => {
     if (!search.trim()) return true;
     const e = journalNotes[k]; if (!e) return false;
     const q = search.toLowerCase();
-    const hay = [e.quickNotes, e.selfReview, e.mentorNotes, e.mainGoal, e.feelingResults, ...(e.graces || [])].filter(Boolean).join(" ").toLowerCase();
+    const hay = [e.quickNotes, e.selfReview, e.mentorNotes, e.mainGoal, e.feelingResults, ...(e.graces || []), ...Object.values(e.checklist?.card || {})].filter(Boolean).join(" ").toLowerCase();
     return hay.includes(q);
   };
 
@@ -6381,7 +6560,7 @@ function MyNotes({ state, dispatch }) {
       </div>
 
       <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 999, padding: 5, maxWidth: 640, margin: "0 auto", width: "100%" }}>
-        {[["graces", "🚩 Graces and Goals"], ["daily", "📄 Daily Notes"], ["past", "📅 Past Entries"]].map(([id, label]) => (
+        {[["graces", "🚩 Graces and Goals"], ["daily", "📄 Daily Notes"], ["checklist", "☑️ Pre-Trade Checklist"], ["past", "📅 Past Entries"]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "10px 12px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
             background: tab === id ? `linear-gradient(90deg, ${C.accent}, ${C.accent2}, #FFFFFF)` : "transparent", color: tab === id ? "#000" : C.textMuted }}>{label}</button>
         ))}
@@ -6489,6 +6668,8 @@ function MyNotes({ state, dispatch }) {
         </div>
       )}
 
+      {tab === "checklist" && <ChecklistTab todayEntry={todayEntry} saveField={saveField} />}
+
       {tab === "past" && (
         <div style={{ maxWidth: 900, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
           <Card>
@@ -6579,6 +6760,32 @@ function MyNotes({ state, dispatch }) {
                   {popupEntry.mentorScreenshot && <img src={popupEntry.mentorScreenshot} alt="" style={{ width: "100%", borderRadius: 8, border: `1px solid ${C.border}` }} />}
                 </div>
               )}
+              {hasChecklistData(popupEntry.checklist) && (() => {
+                const cl = popupEntry.checklist || {};
+                const { checked, total } = checklistCompletion(cl);
+                const decisionLabel = cl.decision === "take" ? "✓ Took the Trade" : cl.decision === "wait" ? "⏸ Waited / No Trade" : "";
+                const filledCardFields = CHECKLIST_CARD_FIELDS.filter(f => cl.card?.[f.id]);
+                return (
+                  <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ flex: 1, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }}>☑️ Pre-Trade Checklist</div>
+                      <button onClick={() => del("checklist")} style={{ background: "none", border: "none", color: C.red, cursor: "pointer" }}>🗑</button>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                      <Badge color={checked === total ? C.accent : C.yellow}>{checked}/{total} checked</Badge>
+                      {decisionLabel && <Badge color={cl.decision === "take" ? C.accent : C.red}>{decisionLabel}</Badge>}
+                    </div>
+                    {filledCardFields.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {filledCardFields.map(f => (
+                          <div key={f.id} style={{ fontSize: 12.5 }}><span style={{ color: C.textDim }}>{f.label}: </span><span style={{ color: C.textMuted }}>{cl.card[f.id]}</span></div>
+                        ))}
+                        {cl.card?.emotionalState && <div style={{ fontSize: 12.5 }}><span style={{ color: C.textDim }}>Emotional State: </span><span style={{ color: C.textMuted }}>{cl.card.emotionalState}</span></div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         );
