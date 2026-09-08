@@ -6881,6 +6881,7 @@ function ChecklistPage({ state, dispatch }) {
   const [popupDate, setPopupDate] = useState(null);
   const [viewTradeId, setViewTradeId] = useState(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { date, id, label }
 
   const today = new Date();
   const todayKey = dateKey(today);
@@ -6888,7 +6889,7 @@ function ChecklistPage({ state, dispatch }) {
 
   const patchEntry = (id, patch) => dispatch({ type: "UPDATE_CHECKLIST_ENTRY", date: todayKey, id, data: patch });
   const addEntry = () => dispatch({ type: "ADD_CHECKLIST_ENTRY", date: todayKey, entry: newChecklistEntry() });
-  const deleteEntry = (id) => dispatch({ type: "DELETE_CHECKLIST_ENTRY", date: todayKey, id });
+  const requestDeleteEntry = (date, id, label) => setDeleteConfirm({ date, id, label });
 
   // If viewing a linked trade, show the full trade detail in place of the
   // page — same "overlay" pattern the Dashboard/Journal calendars use — so
@@ -6980,7 +6981,7 @@ function ChecklistPage({ state, dispatch }) {
           ) : (
             todayEntries.map((entry, i) => (
               <ChecklistEntryEditor key={entry.id} entry={entry} index={i} trades={state.trades}
-                onChange={patch => patchEntry(entry.id, patch)} onDelete={() => deleteEntry(entry.id)}
+                onChange={patch => patchEntry(entry.id, patch)} onDelete={() => requestDeleteEntry(todayKey, entry.id, `Entry #${i + 1}`)}
                 onViewTrade={setViewTradeId} defaultOpen={todayEntries.length === 1} />
             ))
           )}
@@ -7040,9 +7041,24 @@ function ChecklistPage({ state, dispatch }) {
               {popupEntries.map((entry, i) => (
                 <PastChecklistEntryView key={entry.id} entry={entry} index={i} trades={state.trades}
                   onViewTrade={id => { setPopupDate(null); setViewTradeId(id); }}
-                  onDelete={() => dispatch({ type: "DELETE_CHECKLIST_ENTRY", date: dateKey(popupDate), id: entry.id })}
+                  onDelete={() => requestDeleteEntry(dateKey(popupDate), entry.id, `Entry #${i + 1}`)}
                   defaultOpen={popupEntries.length === 1} />
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setDeleteConfirm(null)}>
+          <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: "100%", maxWidth: 380 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>Delete this checklist entry?</div>
+            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
+              Delete <b>{deleteConfirm.label}</b>? Everything you answered, along with any linked trade, will be removed. This cannot be undone.
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn small variant="danger" onClick={() => { dispatch({ type: "DELETE_CHECKLIST_ENTRY", date: deleteConfirm.date, id: deleteConfirm.id }); setDeleteConfirm(null); }} style={{ flex: 1, justifyContent: "center" }}>Yes, Delete</Btn>
+              <Btn small variant="ghost" onClick={() => setDeleteConfirm(null)} style={{ flex: 1, justifyContent: "center" }}>Cancel</Btn>
             </div>
           </div>
         </div>
