@@ -6699,6 +6699,30 @@ function newChecklistEntry(tradeId = null) {
   return { id: `ce${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, tradeId, answers: {}, card: {}, decision: "" };
 }
 
+// Small trash button that, on click, drops open a compact confirm panel
+// directly beneath itself (not a centered modal) — "Delete? Yes / Cancel"
+// right where you clicked, inside the same entry card.
+function DeleteEntryButton({ onConfirm, label = "Delete this entry?" }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen(o => !o)} title="Delete this entry" style={{ background: "none", border: "none", color: C.red, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>🗑</button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 149 }} />
+          <div className="fade-in" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 190, background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, boxShadow: "0 12px 30px #000a", zIndex: 150 }}>
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10, lineHeight: 1.5 }}>{label} This cannot be undone.</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn small variant="danger" onClick={() => { onConfirm(); setOpen(false); }} style={{ flex: 1, justifyContent: "center", padding: "6px 0" }}>Delete</Btn>
+              <Btn small variant="ghost" onClick={() => setOpen(false)} style={{ flex: 1, justifyContent: "center", padding: "6px 0" }}>Cancel</Btn>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ChecklistYesNo({ value, onChange }) {
   return (
     <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
@@ -6813,7 +6837,7 @@ function ChecklistEntryEditor({ entry, index, trades, onChange, onDelete, onView
             <button onClick={() => setPickerOpen(o => !o)} style={{ background: C.surfaceHigh, border: `1.5px dashed ${C.border}`, borderRadius: 999, color: C.textMuted, fontSize: 12, fontWeight: 700, padding: "7px 14px", cursor: "pointer" }}>🔗 Link a Trade</button>
           )}
           {pickerOpen && <TradeLinkPicker trades={trades} onPick={setTradeId} onClose={() => setPickerOpen(false)} />}
-          <button onClick={onDelete} title="Delete this entry" style={{ background: "none", border: "none", color: C.red, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>🗑</button>
+          <DeleteEntryButton onConfirm={onDelete} label={`Delete Entry #${index + 1}?`} />
         </div>
       </div>
 
@@ -6881,7 +6905,6 @@ function ChecklistPage({ state, dispatch }) {
   const [popupDate, setPopupDate] = useState(null);
   const [viewTradeId, setViewTradeId] = useState(null);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // { date, id, label }
 
   const today = new Date();
   const todayKey = dateKey(today);
@@ -6889,7 +6912,7 @@ function ChecklistPage({ state, dispatch }) {
 
   const patchEntry = (id, patch) => dispatch({ type: "UPDATE_CHECKLIST_ENTRY", date: todayKey, id, data: patch });
   const addEntry = () => dispatch({ type: "ADD_CHECKLIST_ENTRY", date: todayKey, entry: newChecklistEntry() });
-  const requestDeleteEntry = (date, id, label) => setDeleteConfirm({ date, id, label });
+  const deleteEntry = (date, id) => dispatch({ type: "DELETE_CHECKLIST_ENTRY", date, id });
 
   // If viewing a linked trade, show the full trade detail in place of the
   // page — same "overlay" pattern the Dashboard/Journal calendars use — so
@@ -6981,7 +7004,7 @@ function ChecklistPage({ state, dispatch }) {
           ) : (
             todayEntries.map((entry, i) => (
               <ChecklistEntryEditor key={entry.id} entry={entry} index={i} trades={state.trades}
-                onChange={patch => patchEntry(entry.id, patch)} onDelete={() => requestDeleteEntry(todayKey, entry.id, `Entry #${i + 1}`)}
+                onChange={patch => patchEntry(entry.id, patch)} onDelete={() => deleteEntry(todayKey, entry.id)}
                 onViewTrade={setViewTradeId} defaultOpen={todayEntries.length === 1} />
             ))
           )}
@@ -7041,24 +7064,9 @@ function ChecklistPage({ state, dispatch }) {
               {popupEntries.map((entry, i) => (
                 <PastChecklistEntryView key={entry.id} entry={entry} index={i} trades={state.trades}
                   onViewTrade={id => { setPopupDate(null); setViewTradeId(id); }}
-                  onDelete={() => requestDeleteEntry(dateKey(popupDate), entry.id, `Entry #${i + 1}`)}
+                  onDelete={() => deleteEntry(dateKey(popupDate), entry.id)}
                   defaultOpen={popupEntries.length === 1} />
               ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setDeleteConfirm(null)}>
-          <div className="fade-in" onClick={e => e.stopPropagation()} style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: "100%", maxWidth: 380 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>Delete this checklist entry?</div>
-            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
-              Delete <b>{deleteConfirm.label}</b>? Everything you answered, along with any linked trade, will be removed. This cannot be undone.
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <Btn small variant="danger" onClick={() => { dispatch({ type: "DELETE_CHECKLIST_ENTRY", date: deleteConfirm.date, id: deleteConfirm.id }); setDeleteConfirm(null); }} style={{ flex: 1, justifyContent: "center" }}>Yes, Delete</Btn>
-              <Btn small variant="ghost" onClick={() => setDeleteConfirm(null)} style={{ flex: 1, justifyContent: "center" }}>Cancel</Btn>
             </div>
           </div>
         </div>
@@ -7087,7 +7095,7 @@ function PastChecklistEntryView({ entry, index, trades, onViewTrade, onDelete, d
           {decisionLabel && <Badge color={entry.decision === "take" ? C.accent : C.red}>{decisionLabel}</Badge>}
         </div>
         {linkedTrade && <LinkedTradeChip trade={linkedTrade} onView={() => onViewTrade(linkedTrade.id)} />}
-        <button onClick={onDelete} title="Delete this entry" style={{ background: "none", border: "none", color: C.red, fontSize: 15, cursor: "pointer" }}>🗑</button>
+        <DeleteEntryButton onConfirm={onDelete} label={`Delete Entry #${index + 1}?`} />
       </div>
 
       {open && (
