@@ -1095,7 +1095,9 @@ function reducer(state, action) {
     case "SET_JOURNAL_FIELD": next = { ...state, journalNotes: { ...state.journalNotes, [action.date]: { ...(state.journalNotes?.[action.date] || {}), [action.field]: action.value } } }; break;
     case "DELETE_JOURNAL_FIELD": { const day = { ...(state.journalNotes?.[action.date] || {}) }; delete day[action.field]; next = { ...state, journalNotes: { ...state.journalNotes, [action.date]: day } }; break; }
     case "DELETE_JOURNAL_DAY": { const jn = { ...state.journalNotes }; delete jn[action.date]; next = { ...state, journalNotes: jn }; break; }
-    case "SET_CHECKLIST_DATA": next = { ...state, checklistEntries: { ...state.checklistEntries, [action.date]: { ...(state.checklistEntries?.[action.date] || {}), ...action.data } } }; break;
+    case "ADD_CHECKLIST_ENTRY": next = { ...state, checklistEntries: { ...state.checklistEntries, [action.date]: [...(Array.isArray(state.checklistEntries?.[action.date]) ? state.checklistEntries[action.date] : []), action.entry] } }; break;
+    case "UPDATE_CHECKLIST_ENTRY": { const dayArr = Array.isArray(state.checklistEntries?.[action.date]) ? state.checklistEntries[action.date] : []; next = { ...state, checklistEntries: { ...state.checklistEntries, [action.date]: dayArr.map(e => e.id === action.id ? { ...e, ...action.data } : e) } }; break; }
+    case "DELETE_CHECKLIST_ENTRY": { const dayArr = Array.isArray(state.checklistEntries?.[action.date]) ? state.checklistEntries[action.date] : []; next = { ...state, checklistEntries: { ...state.checklistEntries, [action.date]: dayArr.filter(e => e.id !== action.id) } }; break; }
     case "DELETE_CHECKLIST_DAY": { const ce = { ...state.checklistEntries }; delete ce[action.date]; next = { ...state, checklistEntries: ce }; break; }
     case "ADD_PAYOUT": next = { ...state, payouts: [...state.payouts, action.payout] }; break;
     case "UPDATE_PAYOUT": next = { ...state, payouts: state.payouts.map(p => p.id === action.id ? { ...p, ...action.data } : p) }; break;
@@ -6605,9 +6607,10 @@ function MyNotes({ state, dispatch }) {
 }
 
 // ─── CHECKLIST PAGE (from the "August Trading Lessons" rulebook) ────────────
-// Stored per-day in state.checklistEntries[date] = { answers: {id: value},
-// card: {field: string}, decision: "take"|"wait"|"" } — day-keyed like the
-// rest of the journal, with its own Past Entries calendar.
+// Stored per-day in state.checklistEntries[date] = [entry, entry, ...] — an
+// ARRAY, since a trading day can have several trades, each with its own
+// checklist. Each entry: { id, tradeId (optional link into state.trades),
+// answers: {questionId: value}, card: {field: string}, decision: "take"|"wait"|"" }.
 const AUGUST_RULES = [
   { t: "Control greed and oversizing.", d: "A good setup does not justify taking excessive size." },
   { t: "Do not chase a missed trade.", d: "If the entry is gone, let it go. Wait for the next opportunity." },
@@ -6683,7 +6686,17 @@ function hasChecklistEntry(entry) {
   if (!entry) return false;
   const { answered } = checklistCompletion(entry);
   const anyCard = entry.card && Object.values(entry.card).some(v => v && String(v).trim());
-  return !!(answered || anyCard || entry.decision);
+  return !!(answered || anyCard || entry.decision || entry.tradeId);
+}
+// Normalizes whatever is stored for a day into an array of entries — always
+// an array going forward, but tolerant of nothing being there yet.
+function getDayEntries(checklistEntries, key) {
+  const raw = checklistEntries?.[key];
+  if (!raw) return [];
+  return Array.isArray(raw) ? raw : [raw];
+}
+function newChecklistEntry(tradeId = null) {
+  return { id: `ce${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, tradeId, answers: {}, card: {}, decision: "" };
 }
 
 function ChecklistYesNo({ value, onChange }) {
@@ -6703,105 +6716,160 @@ function ChecklistYesNo({ value, onChange }) {
   );
 }
 
-function ChecklistTodayView({ entry, dispatch, todayKey, savedFlash, setSavedFlash }) {
+// Compact chip showing a linked trade's key facts, used both collapsed
+// (in the entry header) and in the Past Entries popup. Tapping it opens the
+// full TradeDetail overlay so you're instantly reminded which trade this
+// whole checklist was for.
+function LinkedTradeChip({ trade, onView, onUnlink }) {
+  if (!trade) return null;
+  const fees = parseFloat(trade.fees) || 0;
+  const net = trade.pnl - fees;
+  const col = outcomeColor(trade.outcome, net);
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: col + "14", border: `1px solid ${col}55`, borderRadius: 999, padding: "5px 6px 5px 12px" }}>
+      <span style={{ fontSize: 12, fontWeight: 800, color: col }}>{trade.symbol}</span>
+      <span style={{ fontSize: 11.5, color: C.textMuted }}>{trade.direction}</span>
+      <span style={{ fontSize: 11.5, color: C.textDim }}>{fmtDate(trade.date)}</span>
+      <span style={{ fontSize: 12, fontWeight: 800, color: col }}>{fmt$(net)}</span>
+      {onView && (
+        <button onClick={onView} title="Open this trade" style={{ background: col + "22", border: "none", borderRadius: 999, color: col, fontSize: 11, fontWeight: 800, padding: "4px 10px", cursor: "pointer" }}>View Trade →</button>
+      )}
+      {onUnlink && (
+        <button onClick={onUnlink} title="Unlink trade" style={{ background: "none", border: "none", color: C.textDim, fontSize: 14, cursor: "pointer", padding: "0 2px" }}>×</button>
+      )}
+    </div>
+  );
+}
+
+// Search + list picker for linking a checklist entry to one of your logged
+// trades. Defaults to showing the most recent trades first; typing narrows
+// by symbol/setup/direction so it's fast even with a long trade history.
+function TradeLinkPicker({ trades, onPick, onClose }) {
+  const [q, setQ] = useState("");
+  const sorted = [...trades].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const filtered = q.trim()
+    ? sorted.filter(t => [t.symbol, t.setup, t.direction, t.outcome].filter(Boolean).join(" ").toLowerCase().includes(q.toLowerCase()))
+    : sorted;
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 149 }} />
+      <div className="fade-in" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, width: 300, maxWidth: "90vw", background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 10, boxShadow: "0 16px 40px #000a", zIndex: 150 }}>
+        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search by symbol, setup, direction…"
+          style={{ width: "100%", boxSizing: "border-box", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "9px 11px", fontSize: 12.5, outline: "none", fontFamily: "inherit", marginBottom: 8 }} />
+        <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+          {filtered.length === 0 && <div style={{ fontSize: 12.5, color: C.textDim, padding: "10px 4px", textAlign: "center" }}>No trades match.</div>}
+          {filtered.slice(0, 40).map(t => {
+            const fees = parseFloat(t.fees) || 0, net = t.pnl - fees, col = outcomeColor(t.outcome, net);
+            return (
+              <div key={t.id} onClick={() => onPick(t.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px", borderRadius: 8, cursor: "pointer" }}
+                onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: col, flexShrink: 0 }} />
+                <span style={{ fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}>{t.symbol}</span>
+                <span style={{ fontSize: 11, color: C.textDim, flexShrink: 0 }}>{t.direction}</span>
+                <span style={{ fontSize: 11, color: C.textDim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.setup || ""}</span>
+                <span style={{ fontSize: 11, color: C.textDim, flexShrink: 0 }}>{fmtDate(t.date)}</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: col, flexShrink: 0 }}>{fmt$(net)}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// One trade's checklist for the day — editable when it's today, read-only
+// summary style reused for both the live "Today" tab and, in a slightly
+// different shell, the Past Entries popup.
+function ChecklistEntryEditor({ entry, index, trades, onChange, onDelete, onViewTrade, defaultOpen }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const answers = entry.answers || {};
   const card = entry.card || {};
   const decision = entry.decision || "";
+  const linkedTrade = entry.tradeId ? trades.find(t => t.id === entry.tradeId) : null;
 
-  const save = (patch) => {
-    dispatch({ type: "SET_CHECKLIST_DATA", date: todayKey, data: patch });
-    setSavedFlash(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }));
-  };
-  const setAnswer = (id, value) => save({ answers: { ...answers, [id]: value } });
-  const setCard = (id, value) => save({ card: { ...card, [id]: value } });
-  const setDecision = (val) => save({ decision: decision === val ? "" : val });
+  const setAnswer = (id, value) => onChange({ answers: { ...answers, [id]: value } });
+  const setCard = (id, value) => onChange({ card: { ...card, [id]: value } });
+  const setDecision = (val) => onChange({ decision: decision === val ? "" : val });
+  const setTradeId = (id) => { onChange({ tradeId: id }); setPickerOpen(false); };
 
-  const [rulesOpen, setRulesOpen] = useState(false);
   const { answered, total } = checklistCompletion(entry);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 780, margin: "0 auto", width: "100%" }}>
-      <Card style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700 }}>📅 Today: {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>
-        {savedFlash && <Badge color={C.accent}>✓ Saved {savedFlash}</Badge>}
-      </Card>
-
-      <Card style={{ padding: 0, overflow: "hidden" }}>
-        <div onClick={() => setRulesOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", cursor: "pointer" }}>
-          <span style={{ fontSize: 18 }}>📖</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 15 }}>The 16 Rules — August Trading Lessons</div>
-            <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Read before every trade — especially after a loss.</div>
-          </div>
-          <span style={{ color: C.textDim, fontSize: 13 }}>{rulesOpen ? "▴" : "▾"}</span>
+    <Card style={{ padding: 0, overflow: "visible" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", flexWrap: "wrap" }}>
+        <div onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 200 }}>
+          <span style={{ color: C.textDim, fontSize: 13 }}>{open ? "▾" : "▸"}</span>
+          <div style={{ fontWeight: 800, fontSize: 14 }}>Entry #{index + 1}</div>
+          <Badge color={answered === total ? C.accent : C.yellow}>{answered}/{total}</Badge>
+          {decision === "take" && <Badge color={C.accent}>✓ Took Trade</Badge>}
+          {decision === "wait" && <Badge color={C.red}>⏸ Waited</Badge>}
         </div>
-        {rulesOpen && (
-          <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-            {AUGUST_RULES.map((r, i) => (
-              <div key={i} style={{ fontSize: 13, lineHeight: 1.5, paddingLeft: 14, borderLeft: `2px solid ${C.border}` }}>
-                <span style={{ fontWeight: 700, color: C.accent }}>{i + 1}. {r.t}</span>
-                <div style={{ color: C.textMuted, marginTop: 2 }}>{r.d}</div>
-              </div>
-            ))}
-            <div style={{ textAlign: "center", fontSize: 12.5, color: C.textDim, fontStyle: "italic", marginTop: 4 }}>"I do not need to catch every move. I need to execute my plan correctly."</div>
-          </div>
-        )}
-      </Card>
-
-      <Card style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700 }}>☑️ Before I Enter</div>
-        <Badge color={answered === total ? C.accent : C.yellow}>{answered}/{total} answered</Badge>
-      </Card>
-
-      {CHECKLIST_GROUPS.map(group => (
-        <Card key={group.id}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-            <span style={{ fontSize: 17 }}>{group.icon}</span>
-            <div style={{ fontWeight: 800, fontSize: 15, color: group.color }}>{group.label}</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {group.items.map(item => (
-              <div key={item.id}>
-                {item.type === "yesno" ? (
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14 }}>
-                    <span style={{ fontSize: 13.5, lineHeight: 1.5, color: C.text, flex: 1 }}>{item.text}</span>
-                    <ChecklistYesNo value={answers[item.id] || ""} onChange={v => setAnswer(item.id, v)} />
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ fontSize: 13.5, lineHeight: 1.5, color: C.text, marginBottom: 8 }}>{item.text}</div>
-                    <JournalFieldTextarea value={answers[item.id]} onSave={v => setAnswer(item.id, v)} placeholder="Write your answer…" rows={3} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      ))}
-
-      <Card>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-          <span style={{ fontSize: 17 }}>🗂</span>
-          <div><div style={{ fontWeight: 800, fontSize: 15 }}>Trade Card</div><div style={{ fontSize: 12, color: C.textDim }}>Fill this out before entering. If the answers are weak, wait.</div></div>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
+          {linkedTrade ? (
+            <LinkedTradeChip trade={linkedTrade} onView={() => onViewTrade(linkedTrade.id)} onUnlink={() => setTradeId(null)} />
+          ) : (
+            <button onClick={() => setPickerOpen(o => !o)} style={{ background: C.surfaceHigh, border: `1.5px dashed ${C.border}`, borderRadius: 999, color: C.textMuted, fontSize: 12, fontWeight: 700, padding: "7px 14px", cursor: "pointer" }}>🔗 Link a Trade</button>
+          )}
+          {pickerOpen && <TradeLinkPicker trades={trades} onPick={setTradeId} onClose={() => setPickerOpen(false)} />}
+          <button onClick={onDelete} title="Delete this entry" style={{ background: "none", border: "none", color: C.red, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>🗑</button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          {CHECKLIST_CARD_FIELDS.map(f => (
-            <div key={f.id} style={{ gridColumn: f.full ? "1 / -1" : "auto" }}>
-              <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>{f.label}</div>
-              <JournalFieldInput value={card[f.id]} onSave={v => setCard(f.id, v)} placeholder={f.label} />
+      </div>
+
+      {open && (
+        <div style={{ padding: "0 20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {CHECKLIST_GROUPS.map(group => (
+            <div key={group.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <span style={{ fontSize: 16 }}>{group.icon}</span>
+                <div style={{ fontWeight: 800, fontSize: 14, color: group.color }}>{group.label}</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {group.items.map(item => (
+                  <div key={item.id}>
+                    {item.type === "yesno" ? (
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14 }}>
+                        <span style={{ fontSize: 13.5, lineHeight: 1.5, color: C.text, flex: 1 }}>{item.text}</span>
+                        <ChecklistYesNo value={answers[item.id] || ""} onChange={v => setAnswer(item.id, v)} />
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: C.text, marginBottom: 8 }}>{item.text}</div>
+                        <JournalFieldTextarea value={answers[item.id]} onSave={v => setAnswer(item.id, v)} placeholder="Write your answer…" rows={3} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
-        </div>
-        <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Emotional State</div>
-        <JournalFieldInput value={card.emotionalState} onSave={v => setCard("emotionalState", v)} placeholder="Calm / Anxious / Excited / Frustrated…" />
 
-        <div style={{ marginTop: 18, marginBottom: 6, fontSize: 13, fontWeight: 700 }}>Final Decision</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <button onClick={() => setDecision("take")} style={segBtnStyle(decision === "take", C.accent, "#001018")}>✓ Take Trade</button>
-          <button onClick={() => setDecision("wait")} style={segBtnStyle(decision === "wait", C.red, "#fff")}>⏸ Wait / No Trade</button>
+          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 16 }}>🗂</span>
+              <div><div style={{ fontWeight: 800, fontSize: 14 }}>Trade Card</div><div style={{ fontSize: 12, color: C.textDim }}>Fill this out before entering. If the answers are weak, wait.</div></div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              {CHECKLIST_CARD_FIELDS.map(f => (
+                <div key={f.id} style={{ gridColumn: f.full ? "1 / -1" : "auto" }}>
+                  <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>{f.label}</div>
+                  <JournalFieldInput value={card[f.id]} onSave={v => setCard(f.id, v)} placeholder={f.label} />
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Emotional State</div>
+            <JournalFieldInput value={card.emotionalState} onSave={v => setCard("emotionalState", v)} placeholder="Calm / Anxious / Excited / Frustrated…" />
+
+            <div style={{ marginTop: 18, marginBottom: 6, fontSize: 13, fontWeight: 700 }}>Final Decision</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button onClick={() => setDecision("take")} style={segBtnStyle(decision === "take", C.accent, "#001018")}>✓ Take Trade</button>
+              <button onClick={() => setDecision("wait")} style={segBtnStyle(decision === "wait", C.red, "#fff")}>⏸ Wait / No Trade</button>
+            </div>
+          </div>
         </div>
-      </Card>
-    </div>
+      )}
+    </Card>
   );
 }
 
@@ -6811,13 +6879,28 @@ function ChecklistPage({ state, dispatch }) {
   const [month, setMonth] = useState(new Date());
   const [search, setSearch] = useState("");
   const [popupDate, setPopupDate] = useState(null);
-  const [savedFlash, setSavedFlash] = useState("");
+  const [viewTradeId, setViewTradeId] = useState(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const today = new Date();
   const todayKey = dateKey(today);
-  const todayEntry = checklistEntries[todayKey] || {};
+  const todayEntries = getDayEntries(checklistEntries, todayKey);
 
-  // ── Past Entries calendar grid (same layout as My Notes' calendar) ──
+  const patchEntry = (id, patch) => dispatch({ type: "UPDATE_CHECKLIST_ENTRY", date: todayKey, id, data: patch });
+  const addEntry = () => dispatch({ type: "ADD_CHECKLIST_ENTRY", date: todayKey, entry: newChecklistEntry() });
+  const deleteEntry = (id) => dispatch({ type: "DELETE_CHECKLIST_ENTRY", date: todayKey, id });
+
+  // If viewing a linked trade, show the full trade detail in place of the
+  // page — same "overlay" pattern the Dashboard/Journal calendars use — so
+  // opening a trade from a checklist entry instantly reminds you which
+  // trade the whole checklist was written for.
+  if (viewTradeId) {
+    const trade = state.trades.find(t => t.id === viewTradeId);
+    if (trade) return <TradeDetail trade={trade} state={state} dispatch={dispatch} onBack={() => setViewTradeId(null)} onSelectTrade={id => setViewTradeId(id)} />;
+    setViewTradeId(null);
+  }
+
+  // ── Past Entries calendar grid ──
   const year = month.getFullYear(), mo = month.getMonth();
   const first = new Date(year, mo, 1), daysInMonth = new Date(year, mo + 1, 0).getDate();
   const leading = first.getDay();
@@ -6829,16 +6912,19 @@ function ChecklistPage({ state, dispatch }) {
   let nextD = 1;
   while (cells.length < totalCells) { cells.push({ d: nextD, inMonth: false, dateObj: new Date(year, mo + 1, nextD) }); nextD++; }
 
+  const dayHasAnyEntry = (k) => getDayEntries(checklistEntries, k).some(hasChecklistEntry);
   const matchesSearch = (k) => {
     if (!search.trim()) return true;
-    const e = checklistEntries[k]; if (!e) return false;
     const q = search.toLowerCase();
-    const textAnswers = CHECKLIST_ALL_ITEMS.filter(it => it.type === "text").map(it => e.answers?.[it.id]);
-    const hay = [...textAnswers, ...Object.values(e.card || {})].filter(Boolean).join(" ").toLowerCase();
-    return hay.includes(q);
+    return getDayEntries(checklistEntries, k).some(e => {
+      const trade = e.tradeId ? state.trades.find(t => t.id === e.tradeId) : null;
+      const textAnswers = CHECKLIST_ALL_ITEMS.filter(it => it.type === "text").map(it => e.answers?.[it.id]);
+      const hay = [...textAnswers, ...Object.values(e.card || {}), trade?.symbol, trade?.setup].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
   };
 
-  const popupEntry = popupDate ? (checklistEntries[dateKey(popupDate)] || null) : null;
+  const popupEntries = popupDate ? getDayEntries(checklistEntries, dateKey(popupDate)).filter(hasChecklistEntry) : [];
 
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
@@ -6856,7 +6942,49 @@ function ChecklistPage({ state, dispatch }) {
       </div>
 
       {tab === "today" && (
-        <ChecklistTodayView entry={todayEntry} dispatch={dispatch} todayKey={todayKey} savedFlash={savedFlash} setSavedFlash={setSavedFlash} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 780, margin: "0 auto", width: "100%" }}>
+          <Card style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700 }}>📅 Today: {today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>
+            <Btn small onClick={addEntry}>+ New Trade Checklist</Btn>
+          </Card>
+
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div onClick={() => setRulesOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", cursor: "pointer" }}>
+              <span style={{ fontSize: 18 }}>📖</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>The 16 Rules — August Trading Lessons</div>
+                <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Read before every trade — especially after a loss.</div>
+              </div>
+              <span style={{ color: C.textDim, fontSize: 13 }}>{rulesOpen ? "▴" : "▾"}</span>
+            </div>
+            {rulesOpen && (
+              <div style={{ padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+                {AUGUST_RULES.map((r, i) => (
+                  <div key={i} style={{ fontSize: 13, lineHeight: 1.5, paddingLeft: 14, borderLeft: `2px solid ${C.border}` }}>
+                    <span style={{ fontWeight: 700, color: C.accent }}>{i + 1}. {r.t}</span>
+                    <div style={{ color: C.textMuted, marginTop: 2 }}>{r.d}</div>
+                  </div>
+                ))}
+                <div style={{ textAlign: "center", fontSize: 12.5, color: C.textDim, fontStyle: "italic", marginTop: 4 }}>"I do not need to catch every move. I need to execute my plan correctly."</div>
+              </div>
+            )}
+          </Card>
+
+          {todayEntries.length === 0 ? (
+            <Card style={{ textAlign: "center", padding: 30 }}>
+              <div style={{ fontSize: 26, marginBottom: 10 }}>☑️</div>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>No checklist started for today yet</div>
+              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 18 }}>Start one for your next trade — you can add another later if you take more than one trade today.</div>
+              <Btn onClick={addEntry}>+ Start Checklist Entry</Btn>
+            </Card>
+          ) : (
+            todayEntries.map((entry, i) => (
+              <ChecklistEntryEditor key={entry.id} entry={entry} index={i} trades={state.trades}
+                onChange={patch => patchEntry(entry.id, patch)} onDelete={() => deleteEntry(entry.id)}
+                onViewTrade={setViewTradeId} defaultOpen={todayEntries.length === 1} />
+            ))
+          )}
+        </div>
       )}
 
       {tab === "past" && (
@@ -6868,94 +6996,123 @@ function ChecklistPage({ state, dispatch }) {
               <button onClick={() => setMonth(new Date(year, mo - 1, 1))} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, width: 30, height: 30, cursor: "pointer" }}>‹</button>
               <button onClick={() => setMonth(new Date(year, mo + 1, 1))} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, width: 30, height: 30, cursor: "pointer" }}>›</button>
             </div>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search past checklists by keyword" style={{ width: "100%", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "10px 14px", fontSize: 13, outline: "none", marginBottom: 16 }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search past checklists by keyword, symbol, or setup" style={{ width: "100%", background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: "10px 14px", fontSize: 13, outline: "none", marginBottom: 16 }} />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 6 }}>
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => <div key={d} style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontWeight: 700, padding: "6px 0" }}>{d}</div>)}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
               {cells.map((c, i) => {
                 const k = dateKey(c.dateObj);
-                const e = checklistEntries[k];
-                const entryExists = hasChecklistEntry(e) && c.inMonth;
+                const dayEntries = c.inMonth ? getDayEntries(checklistEntries, k).filter(hasChecklistEntry) : [];
+                const entryExists = dayEntries.length > 0;
                 const isMatch = entryExists && matchesSearch(k);
                 const isToday = c.dateObj.toDateString() === today.toDateString();
-                const decision = e?.decision;
-                const dotColor = decision === "take" ? C.accent : decision === "wait" ? C.red : C.accent;
                 return (
                   <div key={i} onClick={() => entryExists && isMatch && setPopupDate(c.dateObj)}
-                    style={{ aspectRatio: "1", borderRadius: 10, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+                    style={{ aspectRatio: "1", borderRadius: 10, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, position: "relative",
                       cursor: entryExists && isMatch ? "pointer" : "default", opacity: c.inMonth ? (search.trim() && entryExists && !isMatch ? 0.3 : 1) : 0.25,
                       background: entryExists ? C.accentDim : "transparent", border: isToday ? `2px solid ${C.purple}` : entryExists ? `1px solid ${C.accent}55` : `1px solid ${C.border}` }}>
                     <span style={{ fontSize: 14, fontWeight: isToday ? 800 : 600, color: isToday ? C.purple : C.text }}>{c.d}</span>
-                    {entryExists && <div style={{ width: 5, height: 5, borderRadius: "50%", background: dotColor }} />}
+                    {entryExists && (
+                      dayEntries.length > 1
+                        ? <div style={{ fontSize: 9, fontWeight: 800, color: C.accent, background: C.accent + "22", borderRadius: 999, padding: "1px 6px" }}>{dayEntries.length}</div>
+                        : <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.accent }} />
+                    )}
                   </div>
                 );
               })}
             </div>
-            <div style={{ textAlign: "center", fontSize: 12, color: C.textDim, marginTop: 14 }}>Click on highlighted days to view that day's checklist</div>
+            <div style={{ textAlign: "center", fontSize: 12, color: C.textDim, marginTop: 14 }}>Click a highlighted day — days with more than one trade show the count</div>
           </Card>
         </div>
       )}
 
-      {popupDate && popupEntry && (() => {
-        const k = dateKey(popupDate);
-        const { answered, total } = checklistCompletion(popupEntry);
-        const decisionLabel = popupEntry.decision === "take" ? "✓ Took the Trade" : popupEntry.decision === "wait" ? "⏸ Waited / No Trade" : "";
-        const filledCardFields = CHECKLIST_CARD_FIELDS.filter(f => popupEntry.card?.[f.id]);
-        return (
-          <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && setPopupDate(null)}>
-            <div className="fade-in" style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 600, maxHeight: "85vh", overflowY: "auto" }}>
-              <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>{popupDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</h2>
-                <button onClick={() => setPopupDate(null)} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer" }}>×</button>
-              </div>
-              <Btn variant="danger" small style={{ marginBottom: 16 }} onClick={() => { dispatch({ type: "DELETE_CHECKLIST_DAY", date: k }); setPopupDate(null); }}>🗑 Delete Entire Day</Btn>
+      {popupDate && popupEntries.length > 0 && (
+        <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && setPopupDate(null)}>
+          <div className="fade-in" style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 700, maxHeight: "88vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>{popupDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</h2>
+              <button onClick={() => setPopupDate(null)} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.textDim, marginBottom: 18 }}>{popupEntries.length} checklist entr{popupEntries.length !== 1 ? "ies" : "y"} this day — expand each to review.</div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                <Badge color={answered === total ? C.accent : C.yellow}>{answered}/{total} answered</Badge>
-                {decisionLabel && <Badge color={popupEntry.decision === "take" ? C.accent : C.red}>{decisionLabel}</Badge>}
-              </div>
-
-              {CHECKLIST_GROUPS.map(group => {
-                const answeredItems = group.items.filter(it => {
-                  const v = popupEntry.answers?.[it.id];
-                  return it.type === "yesno" ? (v === "Yes" || v === "No") : !!(v && String(v).trim());
-                });
-                if (!answeredItems.length) return null;
-                return (
-                  <div key={group.id} style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>{group.icon} {group.label}</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {answeredItems.map(it => (
-                        <div key={it.id}>
-                          <div style={{ fontSize: 12.5, color: C.textDim, marginBottom: 3 }}>{it.text}</div>
-                          {it.type === "yesno" ? (
-                            <Badge color={popupEntry.answers[it.id] === "Yes" ? C.accent : C.red}>{popupEntry.answers[it.id]}</Badge>
-                          ) : (
-                            <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{popupEntry.answers[it.id]}</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {filledCardFields.length > 0 && (
-                <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>🗂 Trade Card</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {filledCardFields.map(f => (
-                      <div key={f.id} style={{ fontSize: 12.5 }}><span style={{ color: C.textDim }}>{f.label}: </span><span style={{ color: C.textMuted }}>{popupEntry.card[f.id]}</span></div>
-                    ))}
-                    {popupEntry.card?.emotionalState && <div style={{ fontSize: 12.5 }}><span style={{ color: C.textDim }}>Emotional State: </span><span style={{ color: C.textMuted }}>{popupEntry.card.emotionalState}</span></div>}
-                  </div>
-                </div>
-              )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {popupEntries.map((entry, i) => (
+                <PastChecklistEntryView key={entry.id} entry={entry} index={i} trades={state.trades}
+                  onViewTrade={id => { setPopupDate(null); setViewTradeId(id); }}
+                  onDelete={() => dispatch({ type: "DELETE_CHECKLIST_ENTRY", date: dateKey(popupDate), id: entry.id })}
+                  defaultOpen={popupEntries.length === 1} />
+              ))}
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Read-only(ish) view of one past entry inside the Past Entries popup —
+// same accordion pattern as the live editor, but rendering answers as text
+// instead of editable controls, plus a delete-this-entry option.
+function PastChecklistEntryView({ entry, index, trades, onViewTrade, onDelete, defaultOpen }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const { answered, total } = checklistCompletion(entry);
+  const decisionLabel = entry.decision === "take" ? "✓ Took the Trade" : entry.decision === "wait" ? "⏸ Waited / No Trade" : "";
+  const filledCardFields = CHECKLIST_CARD_FIELDS.filter(f => entry.card?.[f.id]);
+  const linkedTrade = entry.tradeId ? trades.find(t => t.id === entry.tradeId) : null;
+
+  return (
+    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", flexWrap: "wrap" }}>
+        <div onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 160 }}>
+          <span style={{ color: C.textDim, fontSize: 13 }}>{open ? "▾" : "▸"}</span>
+          <div style={{ fontWeight: 700, fontSize: 13.5 }}>Entry #{index + 1}</div>
+          <Badge color={answered === total ? C.accent : C.yellow}>{answered}/{total}</Badge>
+          {decisionLabel && <Badge color={entry.decision === "take" ? C.accent : C.red}>{decisionLabel}</Badge>}
+        </div>
+        {linkedTrade && <LinkedTradeChip trade={linkedTrade} onView={() => onViewTrade(linkedTrade.id)} />}
+        <button onClick={onDelete} title="Delete this entry" style={{ background: "none", border: "none", color: C.red, fontSize: 15, cursor: "pointer" }}>🗑</button>
+      </div>
+
+      {open && (
+        <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {CHECKLIST_GROUPS.map(group => {
+            const answeredItems = group.items.filter(it => {
+              const v = entry.answers?.[it.id];
+              return it.type === "yesno" ? (v === "Yes" || v === "No") : !!(v && String(v).trim());
+            });
+            if (!answeredItems.length) return null;
+            return (
+              <div key={group.id}>
+                <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>{group.icon} {group.label}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 4 }}>
+                  {answeredItems.map(it => (
+                    <div key={it.id}>
+                      <div style={{ fontSize: 12, color: C.textDim, marginBottom: 3 }}>{it.text}</div>
+                      {it.type === "yesno" ? (
+                        <Badge color={entry.answers[it.id] === "Yes" ? C.accent : C.red}>{entry.answers[it.id]}</Badge>
+                      ) : (
+                        <div style={{ fontSize: 12.5, color: C.textMuted, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{entry.answers[it.id]}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {filledCardFields.length > 0 && (
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>🗂 Trade Card</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, paddingLeft: 4 }}>
+                {filledCardFields.map(f => (
+                  <div key={f.id} style={{ fontSize: 12 }}><span style={{ color: C.textDim }}>{f.label}: </span><span style={{ color: C.textMuted }}>{entry.card[f.id]}</span></div>
+                ))}
+                {entry.card?.emotionalState && <div style={{ fontSize: 12 }}><span style={{ color: C.textDim }}>Emotional State: </span><span style={{ color: C.textMuted }}>{entry.card.emotionalState}</span></div>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
