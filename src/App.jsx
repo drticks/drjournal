@@ -7210,6 +7210,7 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [hoverSimilarId, setHoverSimilarId] = useState(null);
+  const [checklistPopupOpen, setChecklistPopupOpen] = useState(false);
   const saveNotes = () => {
     const combinedNotes = [
       noteIdea && `💡 Trade Idea / Plan\n${noteIdea}`,
@@ -7292,10 +7293,37 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
         </ShareStepChrome>
       )}
 
+      {checklistPopupOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={e => e.target === e.currentTarget && setChecklistPopupOpen(false)}>
+          <div className="fade-in" style={{ background: C.modalBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 640, maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, flex: 1, display: "flex", alignItems: "center", gap: 8 }}>☑️ Pre-Trade Checklist</h2>
+              <button onClick={() => setChecklistPopupOpen(false)} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 22, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.textDim, marginBottom: 18 }}>{trade.symbol} · {trade.direction} · {fmtDate(trade.date)}</div>
+            {linkedChecklists.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "26px 10px" }}>
+                <div style={{ fontSize: 26, marginBottom: 10 }}>☑️</div>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>No checklist linked to this trade</div>
+                <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 18 }}>Go to the Checklist page and use "🔗 Link a Trade" on an entry to connect it here.</div>
+                {setPage && <Btn onClick={() => { setChecklistPopupOpen(false); setPage("checklist"); }}>Go to Checklist →</Btn>}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {linkedChecklists.map(({ date, entry }) => (
+                  <TradeLinkedChecklistView key={entry.id} date={date} entry={entry} defaultOpen={linkedChecklists.length === 1} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <Btn small variant="gradient" onClick={onBack}>← Back to Trades</Btn>
         <div style={{ flex: 1 }} />
         <Btn small variant="ghost" onClick={() => setShareStep("choose")}>🔗 Share</Btn>
+        <Btn small variant="ghost" onClick={() => setChecklistPopupOpen(true)}>☑️ Checklist{linkedChecklists.length > 0 ? ` (${linkedChecklists.length})` : ""}</Btn>
         <Btn small variant="ghost" onClick={() => dispatch({ type: "OPEN_MODAL", modal: { type: "add_trade", trade } })}>✏️ Edit</Btn>
         <CopyToAccountMenu trade={trade} state={state} dispatch={dispatch} />
         <Btn small variant="danger" onClick={() => setShowDeleteConfirm(true)}>Delete</Btn>
@@ -7495,23 +7523,6 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
             ) : trade.notes ? (
               <div style={{ fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{trade.notes}</div>
             ) : <div style={{ fontSize: 13, color: C.textDim }}>Click + Add to start writing…</div>}
-          </Card>
-
-          {/* Linked Pre-Trade Checklist */}
-          <Card>
-            <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ flex: 1, fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 7 }}>☑️ Pre-Trade Checklist</div>
-              {linkedChecklists.length > 0 && <Btn small variant="ghost" onClick={() => setPage && setPage("checklist")}>Open Checklist →</Btn>}
-            </div>
-            {linkedChecklists.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.6 }}>No checklist linked to this trade yet. Go to the Checklist page and use "Link a Trade" on an entry to connect it here.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {linkedChecklists.map(({ date, entry }) => (
-                  <TradeLinkedChecklistView key={entry.id} date={date} entry={entry} defaultOpen={linkedChecklists.length === 1} />
-                ))}
-              </div>
-            )}
           </Card>
 
           {/* Playbook Setup */}
