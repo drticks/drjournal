@@ -6688,6 +6688,18 @@ function hasChecklistEntry(entry) {
   const anyCard = entry.card && Object.values(entry.card).some(v => v && String(v).trim());
   return !!(answered || anyCard || entry.decision || entry.tradeId);
 }
+// Reverse lookup used by TradeDetail: given a tradeId, find every checklist
+// entry (across all days) that was linked to it, most recent first.
+function findChecklistEntriesForTrade(checklistEntries, tradeId) {
+  if (!tradeId) return [];
+  const out = [];
+  Object.entries(checklistEntries || {}).forEach(([date, dayVal]) => {
+    const arr = Array.isArray(dayVal) ? dayVal : (dayVal ? [dayVal] : []);
+    arr.forEach(e => { if (e.tradeId === tradeId) out.push({ date, entry: e }); });
+  });
+  out.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return out;
+}
 // Normalizes whatever is stored for a day into an array of entries — always
 // an array going forward, but tolerant of nothing being there yet.
 function getDayEntries(checklistEntries, key) {
@@ -7078,11 +7090,55 @@ function ChecklistPage({ state, dispatch }) {
 // Read-only(ish) view of one past entry inside the Past Entries popup —
 // same accordion pattern as the live editor, but rendering answers as text
 // instead of editable controls, plus a delete-this-entry option.
+// Read-only rendering of one entry's answers + trade card — shared by the
+// Past Entries popup and the "linked checklist" card shown on TradeDetail.
+function ChecklistAnswersReadout({ entry }) {
+  const filledCardFields = CHECKLIST_CARD_FIELDS.filter(f => entry.card?.[f.id]);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {CHECKLIST_GROUPS.map(group => {
+        const answeredItems = group.items.filter(it => {
+          const v = entry.answers?.[it.id];
+          return it.type === "yesno" ? (v === "Yes" || v === "No") : !!(v && String(v).trim());
+        });
+        if (!answeredItems.length) return null;
+        return (
+          <div key={group.id}>
+            <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>{group.icon} {group.label}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 4 }}>
+              {answeredItems.map(it => (
+                <div key={it.id}>
+                  <div style={{ fontSize: 12, color: C.textDim, marginBottom: 3 }}>{it.text}</div>
+                  {it.type === "yesno" ? (
+                    <Badge color={entry.answers[it.id] === "Yes" ? C.accent : C.red}>{entry.answers[it.id]}</Badge>
+                  ) : (
+                    <div style={{ fontSize: 12.5, color: C.textMuted, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{entry.answers[it.id]}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {filledCardFields.length > 0 && (
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>🗂 Trade Card</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, paddingLeft: 4 }}>
+            {filledCardFields.map(f => (
+              <div key={f.id} style={{ fontSize: 12 }}><span style={{ color: C.textDim }}>{f.label}: </span><span style={{ color: C.textMuted }}>{entry.card[f.id]}</span></div>
+            ))}
+            {entry.card?.emotionalState && <div style={{ fontSize: 12 }}><span style={{ color: C.textDim }}>Emotional State: </span><span style={{ color: C.textMuted }}>{entry.card.emotionalState}</span></div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PastChecklistEntryView({ entry, index, trades, onViewTrade, onDelete, defaultOpen }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const { answered, total } = checklistCompletion(entry);
   const decisionLabel = entry.decision === "take" ? "✓ Took the Trade" : entry.decision === "wait" ? "⏸ Waited / No Trade" : "";
-  const filledCardFields = CHECKLIST_CARD_FIELDS.filter(f => entry.card?.[f.id]);
   const linkedTrade = entry.tradeId ? trades.find(t => t.id === entry.tradeId) : null;
 
   return (
@@ -7097,46 +7153,28 @@ function PastChecklistEntryView({ entry, index, trades, onViewTrade, onDelete, d
         {linkedTrade && <LinkedTradeChip trade={linkedTrade} onView={() => onViewTrade(linkedTrade.id)} />}
         <DeleteEntryButton onConfirm={onDelete} label={`Delete Entry #${index + 1}?`} />
       </div>
+      {open && <div style={{ padding: "0 16px 16px" }}><ChecklistAnswersReadout entry={entry} /></div>}
+    </div>
+  );
+}
 
-      {open && (
-        <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-          {CHECKLIST_GROUPS.map(group => {
-            const answeredItems = group.items.filter(it => {
-              const v = entry.answers?.[it.id];
-              return it.type === "yesno" ? (v === "Yes" || v === "No") : !!(v && String(v).trim());
-            });
-            if (!answeredItems.length) return null;
-            return (
-              <div key={group.id}>
-                <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>{group.icon} {group.label}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 4 }}>
-                  {answeredItems.map(it => (
-                    <div key={it.id}>
-                      <div style={{ fontSize: 12, color: C.textDim, marginBottom: 3 }}>{it.text}</div>
-                      {it.type === "yesno" ? (
-                        <Badge color={entry.answers[it.id] === "Yes" ? C.accent : C.red}>{entry.answers[it.id]}</Badge>
-                      ) : (
-                        <div style={{ fontSize: 12.5, color: C.textMuted, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{entry.answers[it.id]}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-          {filledCardFields.length > 0 && (
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>🗂 Trade Card</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 5, paddingLeft: 4 }}>
-                {filledCardFields.map(f => (
-                  <div key={f.id} style={{ fontSize: 12 }}><span style={{ color: C.textDim }}>{f.label}: </span><span style={{ color: C.textMuted }}>{entry.card[f.id]}</span></div>
-                ))}
-                {entry.card?.emotionalState && <div style={{ fontSize: 12 }}><span style={{ color: C.textDim }}>Emotional State: </span><span style={{ color: C.textMuted }}>{entry.card.emotionalState}</span></div>}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+// Shown on TradeDetail: every checklist entry that links to this specific
+// trade, so opening a trade instantly reminds you what you answered before
+// taking it.
+function TradeLinkedChecklistView({ date, entry, defaultOpen }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const { answered, total } = checklistCompletion(entry);
+  const decisionLabel = entry.decision === "take" ? "✓ Took the Trade" : entry.decision === "wait" ? "⏸ Waited / No Trade" : "";
+  const dateLabel = new Date(date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  return (
+    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", cursor: "pointer", flexWrap: "wrap" }}>
+        <span style={{ color: C.textDim, fontSize: 13 }}>{open ? "▾" : "▸"}</span>
+        <div style={{ fontWeight: 700, fontSize: 13.5, flex: 1, minWidth: 140 }}>📅 {dateLabel}</div>
+        <Badge color={answered === total ? C.accent : C.yellow}>{answered}/{total} answered</Badge>
+        {decisionLabel && <Badge color={entry.decision === "take" ? C.accent : C.red}>{decisionLabel}</Badge>}
+      </div>
+      {open && <div style={{ padding: "0 16px 16px" }}><ChecklistAnswersReadout entry={entry} /></div>}
     </div>
   );
 }
@@ -7212,6 +7250,7 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
   const fees = parseFloat(trade.fees) || 0;
   const grossPnl = trade.pnl;
   const netPnl = grossPnl - fees;
+  const linkedChecklists = findChecklistEntriesForTrade(state.checklistEntries, trade.id);
 
   return (
     <div className="fade-in" style={{ height: "100%", overflowY: "auto", padding: 24 }}>
@@ -7456,6 +7495,23 @@ function TradeDetail({ trade, state, dispatch, onBack, onSelectTrade, setPage })
             ) : trade.notes ? (
               <div style={{ fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{trade.notes}</div>
             ) : <div style={{ fontSize: 13, color: C.textDim }}>Click + Add to start writing…</div>}
+          </Card>
+
+          {/* Linked Pre-Trade Checklist */}
+          <Card>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ flex: 1, fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 7 }}>☑️ Pre-Trade Checklist</div>
+              {linkedChecklists.length > 0 && <Btn small variant="ghost" onClick={() => setPage && setPage("checklist")}>Open Checklist →</Btn>}
+            </div>
+            {linkedChecklists.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.6 }}>No checklist linked to this trade yet. Go to the Checklist page and use "Link a Trade" on an entry to connect it here.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {linkedChecklists.map(({ date, entry }) => (
+                  <TradeLinkedChecklistView key={entry.id} date={date} entry={entry} defaultOpen={linkedChecklists.length === 1} />
+                ))}
+              </div>
+            )}
           </Card>
 
           {/* Playbook Setup */}
