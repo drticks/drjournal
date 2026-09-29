@@ -5947,6 +5947,98 @@ function parseTradovateCSV(text, accountId) {
   return trades;
 }
 
+// ─── TRADINGVIEW CSV PARSER ────────────────────────────────────────────────
+// TradingView's "Trade History" export (from the Strategy Tester / Paper
+// Trading account panel) lists one row per fill leg, two+ legs per trade:
+// an "Entry long"/"Entry short" row and one or more "Exit long"/"Exit short"
+// rows, all sharing the same "Trade number". Unlike Tradovate, TradingView
+// already prints the fully-realized values (Net PnL USD, Commission USD,
+// Cumulative PnL) on every leg of a closed trade — the same number repeated
+// on the entry row and the exit row(s) — rather than a per-leg partial
+// amount, so the correct total is read from a single leg, not summed across
+// legs. Column names: Symbol, Trade number, Type, Date and time, Order ID,
+// Signal, Price, Size (qty), Size (value), Net PnL USD, Return %,
+// Commission USD, Cumulative PnL USD, Cumulative PnL %.
+function parseTradingViewCSV(text, accountId) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+  if (lines.length < 2) return [];
+  const splitRow = line => (line.match(/(".*?"|[^,]+)/g) || []).map(v => v.replace(/^"|"$/g, "").trim());
+  const headers = splitRow(lines[0]).map(h => h.trim());
+  const idx = name => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+  const iSymbol = idx("Symbol"), iTradeNum = idx("Trade number"), iType = idx("Type"),
+        iDate = idx("Date and time"), iPrice = idx("Price"), iQty = idx("Size (qty)"),
+        iPnl = idx("Net PnL USD"), iCommission = idx("Commission USD");
+
+  const rows = lines.slice(1).map(line => {
+    const v = splitRow(line);
+    return {
+      symbol: v[iSymbol] || "",
+      tradeNum: v[iTradeNum] || "",
+      type: (v[iType] || "").trim(),
+      date: new Date(v[iDate]),
+      price: parseFloat(v[iPrice]) || 0,
+      qty: parseFloat(v[iQty]) || 0,
+      pnl: parseFloat(v[iPnl]) || 0,
+      commission: parseFloat(v[iCommission]) || 0,
+    };
+  }).filter(r => r.tradeNum && r.symbol && !isNaN(r.date.getTime()));
+
+  const groups = new Map();
+  rows.forEach(r => {
+    if (!groups.has(r.tradeNum)) groups.set(r.tradeNum, []);
+    groups.get(r.tradeNum).push(r);
+  });
+
+  // Strips the exchange prefix TradingView adds, e.g. "COMEX_MINI:MGCZ2026" -> "MGCZ2026".
+  const cleanSymbol = (s) => (s.includes(":") ? s.split(":").slice(1).join(":") : s);
+  const pad = n => String(n).padStart(2, "0");
+
+  const trades = [];
+  groups.forEach((groupRows, tradeNum) => {
+    const sorted = [...groupRows].sort((a, b) => a.date - b.date);
+    const entries = sorted.filter(r => /entry/i.test(r.type));
+    const exits = sorted.filter(r => /exit/i.test(r.type));
+    if (!entries.length || !exits.length) return; // still-open position — nothing to import yet
+
+    const direction = /short/i.test(entries[0].type) ? "Short" : "Long";
+    const entryQtySum = entries.reduce((s, r) => s + r.qty, 0) || 1;
+    const exitQtySum = exits.reduce((s, r) => s + r.qty, 0) || entryQtySum;
+    const entryPrice = entries.reduce((s, r) => s + r.price * r.qty, 0) / entryQtySum;
+    const exitPrice = exits.reduce((s, r) => s + r.price * r.qty, 0) / (exitQtySum || 1);
+
+    // The final (most recent) leg carries the trade's fully-realized totals.
+    const lastLeg = sorted[sorted.length - 1];
+    const pnl = lastLeg.pnl;
+    const fees = lastLeg.commission;
+
+    const openDate = entries[0].date;
+    const closeDate = exits[exits.length - 1].date;
+
+    trades.push({
+      id: `t_import_${Date.now()}_${tradeNum}`,
+      date: openDate.toISOString(),
+      symbol: cleanSymbol(entries[0].symbol),
+      direction,
+      outcome: pnl > 0 ? "Win" : pnl < 0 ? "Loss" : "BE",
+      entry: +entryPrice.toFixed(4),
+      exit: +exitPrice.toFixed(4),
+      size: Math.round(entryQtySum),
+      pnl: +pnl.toFixed(2),
+      pips: 0,
+      setup: "", session: getTradingSession(openDate).label, mood: "", timeframe: "",
+      openTime: `${pad(openDate.getHours())}:${pad(openDate.getMinutes())}`,
+      closeTime: `${pad(closeDate.getHours())}:${pad(closeDate.getMinutes())}`,
+      fees: +fees.toFixed(2),
+      notes: "",
+      account: accountId,
+      screenshots: [], tags: [],
+    });
+  });
+
+  return trades.sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
 const IMPORT_SOURCES = [
   { id: "any", name: "Any Broker (AI)", badge: "AI-POWERED", badgeColor: C.purple, icon: "✨", iconBg: C.purpleDim, iconColor: C.purple,
     desc: "Upload from any broker or prop firm. Our importer auto-detects your columns and builds your journal.",
@@ -5981,7 +6073,7 @@ const IMPORT_SOURCES = [
   { id: "custom", name: "Custom CSV Format", icon: "📄", iconBg: C.blueDim, iconColor: C.blue,
     desc: "Use your own CSV file format — we'll match common column names automatically.",
     tags: [{ label: "Flexible format", color: C.blue }] },
-].map(s => s.id === "tradovate" ? s : { ...s, disabled: true });
+].map(s => (s.id === "tradovate" || s.id === "tradingview") ? s : { ...s, disabled: true });
 
 function ImportSourceCard({ src, onFile, busy }) {
   const fileRef = useRef();
@@ -6095,6 +6187,8 @@ function ImportTrades({ state, dispatch, setPage }) {
       try {
         const trades = src.id === "tradovate"
           ? parseTradovateCSV(e.target.result, "")
+          : src.id === "tradingview"
+          ? parseTradingViewCSV(e.target.result, "")
           : parseGenericCSV(e.target.result, "");
         if (!trades.length) { notify(`Couldn't find any trades in that file. Double-check it's a ${src.name} export.`); return; }
         setReview({ source: src, trades });
