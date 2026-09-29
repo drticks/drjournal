@@ -6,6 +6,7 @@ import logoUrl from "./logo.png";
 import logoUrlDay from "./logo2.png";
 import meditationAudio from "./meditation.mp3";
 import tradovateLogoUrl from "./tradovate.png";
+import tradingviewLogoUrl from "./TV.png";
 
 // ─── THEME — DR. JOURNAL (Neon) ─────────────────────────────────────────────────
 // C is intentionally a single mutable object — every component reads C.xxx at
@@ -878,7 +879,7 @@ function defaultState() {
     emotions: ["Focus", "Fear", "Greed", "Anger"],
     referenceListsSchemaVersion: REFERENCE_LISTS_SCHEMA_VERSION,
     accountsSchemaVersion: ACCOUNTS_SCHEMA_VERSION,
-    timeframes: ["15 min", "30 min", "1 hr", "4 hr"],
+    timeframes: ["1 min", "5 min", "15 min", "30 min", "1 hr", "4 hr"],
     riskLevels: ["Low Risk", "Normal Risk", "High Risk"],
     trendBiases: ["With Trend", "Counter"],
     weeklyNotes: {}, expenses: [], journalNotes: {}, checklistEntries: {},
@@ -3219,8 +3220,14 @@ function TimePicker({ value, onChange, placeholder = "Select time" }) {
   );
 }
 
+// Timeframe entry options shown in the Add Trade modal. Kept as a constant and
+// merged with whatever is saved in state, so existing users get the new
+// options without a schema migration (which would reset their sessions/emotions).
+const TIMEFRAME_ENTRY_OPTIONS = ["1 min", "5 min", "15 min", "30 min", "1 hr", "4 hr"];
+
 function AddTradeModal({ state, dispatch }) {
-  const { accounts, strategies, sessions, emotions, timeframes = ["15 min", "30 min", "1 hr", "4 hr"], riskLevels = ["Low Risk", "Normal Risk", "High Risk"], trendBiases = ["With Trend", "Counter"] } = state;
+  const { accounts, strategies, sessions, emotions, timeframes: savedTimeframes = [], riskLevels = ["Low Risk", "Normal Risk", "High Risk"], trendBiases = ["With Trend", "Counter"] } = state;
+  const timeframes = [...new Set([...TIMEFRAME_ENTRY_OPTIONS, ...savedTimeframes])];
   const editing = state.modal?.trade;
   const defaultAccount = (state.activeAccount && state.activeAccount !== "all") ? state.activeAccount : (accounts[0]?.id || "");
   const [form, setForm] = useState(() => editing ? {
@@ -6051,7 +6058,7 @@ const IMPORT_SOURCES = [
     desc: "Import trades from Tradovate Performance Reports.",
     note: "Automatically merges split fills executed on the same order into one trade, and tags each trade with the session it was traded in based on its time.",
     tags: [{ label: "Auto-mapping", color: C.blue }, { label: "P&L included", color: C.blue }, { label: "Merges Split Fills", color: C.blue }, { label: "Auto Session Detection", color: C.blue }] },
-  { id: "tradingview", name: "TradingView CSV", badge: "AI-POWERED", badgeColor: C.purple, icon: "▲", iconBg: "#00000022", iconColor: C.text,
+  { id: "tradingview", name: "TradingView CSV", badge: "AI-POWERED", badgeColor: C.purple, icon: "▲", iconImg: tradingviewLogoUrl, iconBg: "#00000022", iconColor: C.text,
     desc: "Import trades from TradingView. Reconstructs accurate trades with real P&L.",
     tags: [{ label: "AI Trade Pairing", color: C.purple }, { label: "All Markets", color: C.blue }] },
   { id: "tradesea", name: "Tradesea CSV", icon: "◆", iconBg: C.blueDim, iconColor: C.blue,
@@ -8809,7 +8816,14 @@ function StatBreakdownSection({ icon, title, trades, field, strategies, colorFn 
   );
 }
 
-const timeframeColor = (v) => v === "15 min" ? "#38bdf8" : v === "30 min" ? "#2dd4bf" : v === "1 hr" ? C.yellow : hashColor(v);
+const timeframeColor = (v) =>
+  v === "1 min" ? C.purple :
+  v === "5 min" ? C.blue :
+  v === "15 min" ? "#38bdf8" :
+  v === "30 min" ? "#2dd4bf" :
+  v === "1 hr" ? C.yellow :
+  v === "4 hr" ? C.accent2 :
+  hashColor(v);
 const sessionColorMap = (v) => v === "Asian" ? "#38bdf8" : v === "London" ? "#9b6bff" : v === "New York" ? C.blue : v === "Pre-New York" ? "#38bdf8" : v === "Power Hour" ? "#ff8844" : hashColor(v);
 const trendColor = (v) => v === "With Trend" ? C.accent : v === "Counter" ? C.red : hashColor(v);
 
